@@ -13,7 +13,6 @@ $reqsPath      = "$toolsDir\requirements.txt"
 $vbsPath       = "$toolsDir\launch_ippy.vbs"
 $shortcutPath  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.lnk"
 
-# Force TLS 1.2 for all web requests
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # -------------------------
@@ -37,29 +36,26 @@ Expand-Archive -Path $pythonZip -DestinationPath $pythonDir -Force
 Remove-Item $pythonZip
 
 # -------------------------
-# Rebuild .pth file if missing (and enable 'import site')
+# Always create ._pth and enable site
 # -------------------------
-$pthFile = Get-ChildItem "$pythonDir\python*.pth" -ErrorAction SilentlyContinue | Select-Object -First 1
+$pyZip = Get-ChildItem "$pythonDir\python*.zip" | Select-Object -First 1
+if (!$pyZip) { Write-Error "Python zip not found"; exit 1 }
 
-if (-not $pthFile) {
-    Write-Warning "⚠️ No .pth file found, creating one manually..."
-    $ver = (Get-ChildItem "$pythonDir\python*.zip").Name -replace '\.zip$',''
-    $pthFilePath = "$pythonDir\$ver._pth"
-    Set-Content -Encoding ASCII -Path $pthFilePath -Value @"
+$ver = $pyZip.Name -replace '\.zip$', ''
+$pthPath = "$pythonDir\$ver._pth"
+
+@"
 $ver.zip
 .
 import site
-"@
-    Write-Host "[*] Created $($ver)._pth and enabled import site"
-} else {
-    (Get-Content $pthFile.FullName) -replace '^#?import site', 'import site' | Set-Content $pthFile.FullName
-    Write-Host "[*] Enabled 'import site' in $($pthFile.Name)"
-}
+"@ | Set-Content -Encoding ASCII -Path $pthPath
+
+Write-Host "[*] Created $ver._pth with 'import site' enabled"
 
 # -------------------------
-# Download your script and requirements
+# Download script and requirements.txt
 # -------------------------
-Write-Host "[*] Downloading project files..."
+Write-Host "[*] Downloading app files..."
 Invoke-WebRequest "$repoRoot/iPPY.py" -OutFile $scriptPath
 Invoke-WebRequest "$repoRoot/requirements.txt" -OutFile $reqsPath
 
@@ -72,14 +68,25 @@ Invoke-WebRequest "https://bootstrap.pypa.io/get-pip.py" -OutFile "$toolsDir\get
 Remove-Item "$toolsDir\get-pip.py"
 
 # -------------------------
-# Install required packages
+# Force install setuptools + deps
 # -------------------------
-Write-Host "[*] Installing dependencies..."
-& "$pythonDir\Scripts\pip.exe" install --upgrade pip setuptools
+Write-Host "[*] Installing setuptools and requirements..."
+& "$pythonDir\Scripts\pip.exe" install --force-reinstall setuptools
+& "$pythonDir\Scripts\pip.exe" install --upgrade pip
 & "$pythonDir\Scripts\pip.exe" install -r $reqsPath
 
 # -------------------------
-# Create VBS launcher (no console)
+# Test pkg_resources
+# -------------------------
+try {
+    & "$pythonDir\python.exe" -c "import pkg_resources" | Out-Null
+    Write-Host "[*] pkg_resources is working."
+} catch {
+    Write-Error "❌ pkg_resources still not available!"
+}
+
+# -------------------------
+# Create silent VBS launcher
 # -------------------------
 Write-Host "[*] Creating VBS launcher..."
 @"
@@ -97,9 +104,9 @@ $shortcut.TargetPath = $vbsPath
 $shortcut.Save()
 
 # -------------------------
-# Autorun after install
+# Auto-launch app now
 # -------------------------
-Write-Host "[*] Launching iPPY for first run..."
+Write-Host "[*] Launching app..."
 Start-Process -WindowStyle Hidden "$vbsPath"
 
-Write-Host "`n✅ iPPY installed and running. Set to auto-start with Windows."
+Write-Host "`n✅ iPPY installed, dependencies loaded, and app launched silently."
