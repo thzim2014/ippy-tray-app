@@ -10,6 +10,7 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image
 from win10toast import ToastNotifier
 from settings_ui import show_settings_window
+import tkinter as tk
 
 # --- Ensure Dependencies ---
 def ensure_dependencies():
@@ -17,7 +18,7 @@ def ensure_dependencies():
         import pkg_resources
         required = {
             'requests', 'pystray', 'Pillow', 'win10toast', 'setuptools',
-            'tk', 'tkcalendar'  # new GUI-related deps for log filtering
+            'tk', 'tkcalendar'
         }
         installed = {pkg.key for pkg in pkg_resources.working_set}
         missing = required - installed
@@ -61,6 +62,8 @@ def get_config():
 
 settings = get_config()
 current_ip = None
+main_window = None
+window_open = False
 toaster = ToastNotifier()
 
 # --- Logging ---
@@ -104,6 +107,8 @@ def on_settings():
 
 def on_exit(icon, item):
     icon.stop()
+    if main_window:
+        main_window.destroy()
 
 def on_recheck():
     global current_ip
@@ -116,19 +121,57 @@ def on_recheck():
     else:
         log_change("Manual recheck: IP unchanged")
 
-tray_menu = Menu(
-    MenuItem("Recheck IP", lambda: on_recheck()),
-    MenuItem("Settings", lambda: on_settings()),
-    MenuItem("Exit", on_exit)
-)
+def open_window():
+    global main_window, window_open
+    if window_open:
+        if main_window:
+            main_window.deiconify()
+        return
+    window_open = True
 
-icon_image = Image.open(ICON_PATH)
-tray_icon = Icon("TrayApp", icon=icon_image, menu=tray_menu)
+    main_window = tk.Tk()
+    main_window.title("IP Monitor")
+    main_window.geometry("300x100")
+    main_window.attributes('-topmost', settings['always_on_screen'])
+    main_window.attributes('-alpha', settings['window_alpha'])
+    main_window.geometry(f"+{settings['window_x']}+{settings['window_y']}")
+
+    label = tk.Label(main_window, text=f"Current IP: {current_ip}", font=("Arial", 12))
+    label.pack(pady=20)
+
+    def on_close():
+        global window_open
+        window_open = False
+        main_window.withdraw()
+
+    main_window.protocol("WM_DELETE_WINDOW", on_close)
+    threading.Thread(target=main_window.mainloop, daemon=True).start()
+
+def toggle_window(icon=None, item=None):
+    if window_open and main_window:
+        main_window.withdraw()
+        globals()['window_open'] = False
+    else:
+        open_window()
+
+def create_tray():
+    global tray_icon
+    icon_image = Image.open(ICON_PATH)
+    tray_menu = Menu(
+        MenuItem("Recheck IP", lambda: on_recheck()),
+        MenuItem("Toggle Window", toggle_window),
+        MenuItem("Settings", lambda: on_settings()),
+        MenuItem("Exit", on_exit)
+    )
+    tray_icon = Icon("TrayApp", icon=icon_image, menu=tray_menu)
+    tray_icon.run()
 
 # --- Main ---
 def main():
     threading.Thread(target=monitor_ip, daemon=True).start()
-    tray_icon.run()
+    if settings['always_on_screen']:
+        open_window()
+    create_tray()
 
 if __name__ == '__main__':
     main()
