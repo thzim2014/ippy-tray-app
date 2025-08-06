@@ -13,49 +13,51 @@ $vbsPath       = "$toolsDir\launch_ippy.vbs"
 $shortcutPath  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.lnk"
 
 # -------------------------
-# Download and install Python
+# Create directories
 # -------------------------
-Write-Host "[*] Downloading full Python installer using curl..."
-Start-Process curl.exe -ArgumentList @("-L", "$installerUrl", "-o", "$installerPath") -NoNewWindow -Wait
+New-Item -Force -ItemType Directory -Path $toolsDir | Out-Null
+
+# -------------------------
+# Download Python installer using bitsadmin
+# -------------------------
+Write-Host "[*] Downloading Python installer using bitsadmin..."
+bitsadmin /transfer "ipyppy" $installerUrl $installerPath
 
 if (!(Test-Path $installerPath)) {
-    Write-Error "❌ Python installer failed to download using curl."
+    Write-Error "❌ bitsadmin failed to download Python installer."
     exit 1
 }
 
-
+# -------------------------
+# Silent install Python
+# -------------------------
 Write-Host "[*] Installing Python silently..."
 Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_tcltk=1" -Wait
 Remove-Item $installerPath
 
 # -------------------------
-# Resolve Python paths
+# Locate installed Python
 # -------------------------
 $pythonExe = (Get-Command python.exe).Source
 $pythonDir = Split-Path -Parent $pythonExe
 $pipExe    = Join-Path $pythonDir "Scripts\pip.exe"
 
 # -------------------------
-# Create tools directory
+# Download app files
 # -------------------------
-New-Item -Force -ItemType Directory -Path $toolsDir | Out-Null
-
-# -------------------------
-# Download script and requirements.txt
-# -------------------------
-Write-Host "[*] Downloading app files..."
+Write-Host "[*] Downloading script and requirements..."
 Invoke-WebRequest "$repoRoot/iPPY.py" -OutFile $scriptPath
 Invoke-WebRequest "$repoRoot/requirements.txt" -OutFile $reqsPath
 
 # -------------------------
-# Install dependencies
+# Install Python packages
 # -------------------------
-Write-Host "[*] Installing dependencies..."
+Write-Host "[*] Installing Python dependencies..."
 & $pipExe install --upgrade pip setuptools
 & $pipExe install -r $reqsPath
 
 # -------------------------
-# Create VBS launcher (no console)
+# Create silent VBS launcher
 # -------------------------
 Write-Host "[*] Creating VBS launcher..."
 @"
@@ -73,12 +75,9 @@ $shortcut.TargetPath = $vbsPath
 $shortcut.Save()
 
 # -------------------------
-# Launch app now
+# Run app now
 # -------------------------
-Write-Host "[*] Launching app..."
+Write-Host "[*] Launching iPPY..."
 Start-Process -WindowStyle Hidden "$vbsPath"
 
-Write-Host "`n✅ Full Python installed, iPPY launched, and set to run at login."
-
-
-
+Write-Host "`n✅ Python installed, app deployed, and iPPY is now running."
