@@ -1,5 +1,7 @@
 Set-StrictMode -Version Latest
 
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
 $installDir = "C:\\Tools\\TrayApp"
 $startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
@@ -80,6 +82,14 @@ if ($LASTEXITCODE -ne 0 -or $pipCheck -match "No module named") {
     & $pythonExe -m ensurepip
     & $pythonExe -m pip install --upgrade pip setuptools wheel
     Remove-Item $getPipScript -Force
+}
+
+# Validate pkg_resources
+try {
+    & $pythonExe -c "import pkg_resources; print('OK')"
+} catch {
+    Write-Warning "pkg_resources is not available. Installing setuptools again."
+    & $pythonExe -m pip install setuptools
 }
 
 Write-Host "Downloading app files..."
