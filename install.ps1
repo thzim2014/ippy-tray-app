@@ -31,12 +31,29 @@ Write-Host "Installing Python..."
 Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
 Remove-Item $pythonInstaller -Force
 
+# Add common paths to PATH in case install didn't set them yet
 $env:Path += ";$env:ProgramFiles\\Python312\\Scripts;$env:ProgramFiles\\Python312\\"
+$env:Path += ";$env:LocalAppData\\Programs\\Python\\Python312\\Scripts;$env:LocalAppData\\Programs\\Python\\Python312\\"
 
-# Dynamically locate python.exe
+# Dynamically locate python.exe from path or fallback locations
 $pythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue)?.Source
-if (-not $pythonExe) {
-    Write-Error "Python executable not found in PATH. Installation may have failed."
+
+if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
+    $fallbacks = @( 
+        "$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe",
+        "$env:ProgramFiles\\Python312\\python.exe",
+        "C:\\Python312\\python.exe"
+    )
+    foreach ($path in $fallbacks) {
+        if (Test-Path $path) {
+            $pythonExe = $path
+            break
+        }
+    }
+}
+
+if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
+    Write-Error "Python executable not found. Installation may have failed or was not added to PATH."
     exit 1
 }
 
