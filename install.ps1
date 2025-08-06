@@ -100,6 +100,16 @@ foreach ($file in $files) {
     Download-File -url $url -destination $target
 }
 
+Write-Host "Fixing malformed requirements.txt if needed..."
+if (Test-Path $requirementsFile) {
+    $content = Get-Content $requirementsFile -Raw
+    if ($content -notmatch "[\r\n]" -and $content -match "[a-zA-Z]+") {
+        $split = ($content -replace '(\w)(?=\w)', '$1 ') -split ' '
+        $cleaned = ($split | Where-Object { $_ -match '^\w+$' }) -join "`n"
+        Set-Content -Path $requirementsFile -Value $cleaned -Encoding UTF8
+    }
+}
+
 Write-Host "Installing dependencies..."
 & $pythonExe -m pip install --upgrade pip setuptools wheel
 & $pythonExe -m pip install -r $requirementsFile
