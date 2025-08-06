@@ -1,4 +1,4 @@
-""Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 
 $repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
 $installDir = "C:\\Tools\\TrayApp"
@@ -36,7 +36,7 @@ Write-Host "Downloading Python..."
 Download-File -url $pythonInstallerUrl -destination $pythonInstaller
 
 Write-Host "Installing Python..."
-Start-Process -FilePath $pythonInstaller -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 TargetDir="C:\\Program Files\\Python312"' -Wait
+Start-Process -FilePath "$pythonInstaller" -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'TargetDir="C:\\Program Files\\Python312"' -Wait
 Remove-Item $pythonInstaller -Force
 
 # Prepare for Python lookup
