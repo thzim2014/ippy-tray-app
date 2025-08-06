@@ -1,15 +1,15 @@
 Set-StrictMode -Version Latest
 
 $repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
-$installDir = "C:\Tools\TrayApp"
+$installDir = "C:\\Tools\\TrayApp"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
-$pythonInstaller = "$env:TEMP\python-installer.exe"
-$requirementsFile = "$installDir\requirements.txt"
+$pythonInstaller = "$env:TEMP\\python-installer.exe"
+$requirementsFile = "$installDir\\requirements.txt"
 $shortcutName = "TrayApp.lnk"
-$vbscriptPath = "$installDir\launcher.vbs"
-$pyScript = "$installDir\main.py"
-$pythonExe = "$env:ProgramFiles\Python312\python.exe"
-$startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+$vbscriptPath = "$installDir\\launcher.vbs"
+$pyScript = "$installDir\\main.py"
+$pythonExe = "$env:ProgramFiles\\Python312\\python.exe"
+$startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 
 function Download-File {
     param ($url, $destination)
@@ -32,7 +32,7 @@ Write-Host "Installing Python..."
 Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
 Remove-Item $pythonInstaller -Force
 
-$env:Path += ";$env:ProgramFiles\Python312\Scripts;$env:ProgramFiles\Python312\"
+$env:Path += ";$env:ProgramFiles\\Python312\\Scripts;$env:ProgramFiles\\Python312\\"
 
 Write-Host "Downloading files from GitHub..."
 $filesToDownload = @(
@@ -54,11 +54,11 @@ Write-Host "Installing Python dependencies..."
 & $pythonExe -m pip install -r $requirementsFile
 
 $WScriptShell = New-Object -ComObject WScript.Shell
-$shortcut = $WScriptShell.CreateShortcut("$startupFolder\$shortcutName")
+$shortcut = $WScriptShell.CreateShortcut("$startupFolder\\$shortcutName")
 $shortcut.TargetPath = "wscript.exe"
 $shortcut.Arguments = "`"$vbscriptPath`""
 $shortcut.WorkingDirectory = $installDir
-$shortcut.IconLocation = "$installDir\icon.ico"
+$shortcut.IconLocation = "$installDir\\icon.ico"
 $shortcut.Save()
 
 Write-Host "Setup complete. The app will launch on next login."
