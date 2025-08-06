@@ -1,12 +1,11 @@
-# Full main.py (standalone version with Logs tab, Update tab, sortable logs, search, export, and settings GUI)
+# === Dependency Bootstrap ===
 import subprocess
 import sys
 
-# --- Ensure dependencies ---
 def ensure_dependencies():
     try:
         import pkg_resources
-        required = {'tk','requests', 'pystray', 'Pillow', 'win10toast', 'setuptools'}
+        required = {'tk', 'requests', 'pystray', 'Pillow', 'win10toast', 'setuptools'}
         installed = {pkg.key for pkg in pkg_resources.working_set}
         missing = required - installed
         if missing:
@@ -17,7 +16,7 @@ def ensure_dependencies():
 
 ensure_dependencies()
 
-# --- Imports ---
+# === Imports ===
 import os
 import time
 import threading
@@ -33,7 +32,7 @@ import csv
 import traceback
 import webbrowser
 
-# --- Constants ---
+# === App Constants & Paths ===
 APP_DIR = r"C:\\Tools\\TrayApp"
 LOG_DIR = os.path.join(APP_DIR, "logs")
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
@@ -44,11 +43,10 @@ ICON_GREEN_PATH = os.path.join(ASSETS_DIR, "tray_app_icon_g.ico")
 ICON_RED_PATH = os.path.join(ASSETS_DIR, "tray_app_icon_r.ico")
 LOG_FILE = os.path.join(LOG_DIR, "ipchanges.log")
 ERROR_LOG_FILE = os.path.join(LOG_DIR, "errors.log")
-
 IP_API_URL = "http://ip-api.com/json/"
 DEFAULT_IP = "0.0.0.0"
 
-# --- Global State ---
+# === Global State ===
 current_ip = None
 icon = None
 float_window = None
@@ -57,11 +55,11 @@ notified = False
 last_manual_check = 0
 first_run = False
 
-# --- Ensure directories ---
+# === Directory Setup ===
 os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# --- Load and Save Config ---
+# === Config Management ===
 def load_config():
     global first_run
     default_config = {
@@ -87,7 +85,7 @@ def save_config():
     with open(CONFIG_PATH, 'w') as f:
         config.write(f)
 
-# --- IP and Logging ---
+# === IP Lookup & Logging ===
 def get_ip():
     try:
         res = requests.get(IP_API_URL, timeout=5)
@@ -102,14 +100,22 @@ def log_ip(ip, changed, manual=False):
         expected_ip = config.get('Settings', 'target_ip')
         with open(LOG_FILE, 'a', newline='') as f:
             writer = csv.writer(f, delimiter='|')
-            writer.writerow([now.split('|')[0], now.split('|')[1], expected_ip, ip, 'Yes' if changed else 'No', 'Yes' if manual else 'No'])
+            writer.writerow([
+                now.split('|')[0], now.split('|')[1], expected_ip, ip,
+                'Yes' if changed else 'No',
+                'Yes' if manual else 'No'
+            ])
 
 def log_error(err):
-    with open(ERROR_LOG_FILE, 'a') as f:
-        f.write(f"[{datetime.datetime.now()}] {str(err)}\n{traceback.format_exc()}\n")
+    try:
+        with open(ERROR_LOG_FILE, 'a') as f:
+            f.write(f"[{datetime.datetime.now()}] {str(err)}\n{traceback.format_exc()}\n")
+    except:
+        pass
 
-# --- Toast Notification ---
+# === Toast Notifications ===
 toaster = ToastNotifier()
+
 def notify_change(old_ip, new_ip):
     if config.getboolean('Settings', 'notify_on_change', fallback=True):
         try:
@@ -117,7 +123,7 @@ def notify_change(old_ip, new_ip):
         except Exception as e:
             log_error(e)
 
-# --- Floating Window ---
+# === Floating Window Class ===
 class FloatingWindow(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -126,8 +132,10 @@ class FloatingWindow(tk.Tk):
         self.geometry(f"+{config.get('Settings', 'window_x', fallback='10')}+{config.get('Settings', 'window_y', fallback='900')}")
         self.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
         self.configure(bg="black")
+
         self.label = tk.Label(self, text="...", font=("Arial", 14), fg="white", bg="black")
         self.label.pack(padx=5, pady=2)
+
         self.make_draggable(self.label)
         self.protocol("WM_DELETE_WINDOW", self.withdraw)
 
@@ -148,7 +156,7 @@ class FloatingWindow(tk.Tk):
         config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
         save_config()
 
-# --- UI logic ---
+# === Float Window Controls ===
 def toggle_float_window():
     global float_window
     if float_window:
@@ -163,6 +171,7 @@ def toggle_float_window():
             float_window.mainloop()
         threading.Thread(target=run, daemon=True).start()
 
+# === Tray Icon ===
 def get_tray_icon():
     target_ip = config['Settings']['target_ip']
     return ICON_GREEN_PATH if current_ip == target_ip else ICON_RED_PATH
@@ -181,8 +190,7 @@ def update_float_window(ip, _):
         float_window.label.config(text=ip)
         target_ip = config.get('Settings', 'target_ip', fallback='0.0.0.0')
         correct = ip == target_ip
-        display_color = 'green' if correct else 'red'
-        float_window.label.config(bg=display_color)
+        float_window.label.config(bg='green' if correct else 'red')
         if not correct:
             float_window.attributes("-alpha", 1.0)
             notified = True
@@ -190,6 +198,7 @@ def update_float_window(ip, _):
             float_window.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
             notified = False
 
+# === Manual IP Recheck ===
 def recheck_ip():
     global last_manual_check, current_ip
     now = time.time()
@@ -205,6 +214,7 @@ def recheck_ip():
             update_icon()
             log_ip(new_ip, changed, manual=True)
 
+# === Background IP Monitor ===
 def monitor_ip():
     global current_ip
     while True:
@@ -221,9 +231,11 @@ def monitor_ip():
                 log_ip(new_ip, changed, manual=False)
         except Exception as e:
             log_error(e)
+
         interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
         time.sleep(60 / interval)
 
+# === Tray Exit ===
 def on_exit(icon, item):
     try:
         if float_window:
@@ -233,8 +245,10 @@ def on_exit(icon, item):
     except Exception as e:
         log_error(e)
 
+# === Create Tray Menu ===
 def create_tray():
     global icon
+
     def get_window_label():
         if float_window and float_window.state() != 'withdrawn':
             return "Hide IP Window"
@@ -248,10 +262,8 @@ def create_tray():
     ))
     icon.run()
 
-# --- Settings GUI + Logs + Update ---
+# === Settings Window GUI ===
 def on_settings(icon=None, item=None):
-    from tkinter import BooleanVar, StringVar
-
     win = tk.Tk()
     win.title("iPPY Settings")
     win.geometry("800x500")
@@ -265,7 +277,7 @@ def on_settings(icon=None, item=None):
     tabs.add(update, text="Update")
     tabs.pack(expand=1, fill='both')
 
-    # Main Tab
+    # --- Main Tab ---
     tk.Label(main, text="IP To Monitor:").pack()
     ip_entry = tk.Entry(main)
     ip_entry.insert(0, config['Settings']['target_ip'])
@@ -276,25 +288,36 @@ def on_settings(icon=None, item=None):
     interval_entry.insert(0, config['Settings']['check_interval'])
     interval_entry.pack()
 
-    notify_var = BooleanVar(value=config.getboolean('Settings', 'notify_on_change'))
-    log_var = BooleanVar(value=config.getboolean('Settings', 'enable_logging'))
-    screen_var = BooleanVar(value=config.getboolean('Settings', 'always_on_screen'))
+    notify_var = tk.BooleanVar(value=config.getboolean('Settings', 'notify_on_change'))
+    log_var = tk.BooleanVar(value=config.getboolean('Settings', 'enable_logging'))
+    screen_var = tk.BooleanVar(value=config.getboolean('Settings', 'always_on_screen'))
 
     tk.Checkbutton(main, text="Enable Notifications", variable=notify_var).pack(anchor='w')
     tk.Checkbutton(main, text="Enable Logging", variable=log_var).pack(anchor='w')
     tk.Checkbutton(main, text="Always on Screen", variable=screen_var).pack(anchor='w')
 
-    # Logs Tab
-    filter_var = BooleanVar()
-    search_var = StringVar()
+    def save_and_close():
+        config['Settings']['target_ip'] = ip_entry.get().strip()
+        config['Settings']['check_interval'] = str(max(1, min(45, int(interval_entry.get().strip() or 1))))
+        config['Settings']['notify_on_change'] = 'yes' if notify_var.get() else 'no'
+        config['Settings']['enable_logging'] = 'yes' if log_var.get() else 'no'
+        config['Settings']['always_on_screen'] = 'yes' if screen_var.get() else 'no'
+        save_config()
+        win.destroy()
+
+    tk.Button(main, text="Save & Close", command=save_and_close).pack(pady=5)
+
+    # --- Logs Tab ---
+    filter_var = tk.BooleanVar()
+    search_var = tk.StringVar()
 
     search_entry = tk.Entry(logs, textvariable=search_var)
     search_entry.pack(fill='x')
 
-    log_table = ttk.Treeview(logs, columns=('Date', 'Time', 'Expected', 'Detected', 'Changed', 'Manual'), show='headings')
+    log_table = ttk.Treeview(logs, columns=('Date', 'Time', 'Expected IP', 'Detected IP', 'Changed', 'Manual'), show='headings')
     for col in log_table['columns']:
         log_table.heading(col, text=col, command=lambda c=col: sort_table(c, False))
-        log_table.column(col, width=100)
+        log_table.column(col, width=120)
     log_table.pack(expand=True, fill='both')
 
     def sort_table(col, reverse):
@@ -316,9 +339,9 @@ def on_settings(icon=None, item=None):
                             continue
                         log_table.insert('', 'end', values=row)
 
+    search_var.trace_add('write', lambda *_: refresh_logs())
     tk.Checkbutton(logs, text="Only show changed", variable=filter_var, command=refresh_logs).pack(anchor='w')
     tk.Button(logs, text="Export to CSV", command=lambda: export_logs(log_table)).pack(anchor='e', pady=2, padx=2)
-    search_var.trace_add('write', lambda *_: refresh_logs())
     refresh_logs()
 
     def export_logs(table):
@@ -331,13 +354,6 @@ def on_settings(icon=None, item=None):
             for child in table.get_children():
                 writer.writerow(table.item(child)['values'])
 
-    # Purge section
-    purge_frame = tk.Frame(logs)
-    purge_frame.pack(pady=5)
-    tk.Label(purge_frame, text="Purge logs older than:").pack(side='left')
-    for months in [1, 2, 3]:
-        tk.Button(purge_frame, text=f"{months}m", command=lambda m=months: (purge_logs(m), refresh_logs())).pack(side='left', padx=5)
-
     def purge_logs(months):
         cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
         with open(LOG_FILE, 'r') as f:
@@ -347,7 +363,13 @@ def on_settings(icon=None, item=None):
             writer = csv.writer(f, delimiter='|')
             writer.writerows(filtered)
 
-    # Update Tab
+    purge_frame = tk.Frame(logs)
+    purge_frame.pack(pady=5)
+    tk.Label(purge_frame, text="Purge logs older than:").pack(side='left')
+    for months in [1, 2, 3]:
+        tk.Button(purge_frame, text=f"{months}m", command=lambda m=months: (purge_logs(m), refresh_logs())).pack(side='left', padx=5)
+
+    # --- Update Tab ---
     update_status = tk.Label(update, text="Checking version...")
     update_status.pack(pady=10)
     update_button = tk.Button(update, text="Update Now", state='disabled', command=lambda: perform_update(update_status))
@@ -373,19 +395,7 @@ def on_settings(icon=None, item=None):
 
     check_for_update()
 
-    def save_and_close():
-        config['Settings']['target_ip'] = ip_entry.get().strip()
-        config['Settings']['check_interval'] = str(max(1, min(45, int(interval_entry.get().strip() or 1))))
-        config['Settings']['notify_on_change'] = 'yes' if notify_var.get() else 'no'
-        config['Settings']['enable_logging'] = 'yes' if log_var.get() else 'no'
-        config['Settings']['always_on_screen'] = 'yes' if screen_var.get() else 'no'
-        save_config()
-        win.destroy()
-
-    tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
-    win.mainloop()
-
-# --- Main ---
+# === Main Entry Point ===
 if __name__ == '__main__':
     try:
         load_config()
