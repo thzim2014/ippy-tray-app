@@ -8,7 +8,6 @@ $requirementsFile = "$installDir\\requirements.txt"
 $shortcutName = "TrayApp.lnk"
 $vbscriptPath = "$installDir\\launcher.vbs"
 $pyScript = "$installDir\\main.py"
-$pythonExe = "$env:ProgramFiles\\Python312\\python.exe"
 $startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 
 function Download-File {
@@ -33,6 +32,13 @@ Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1
 Remove-Item $pythonInstaller -Force
 
 $env:Path += ";$env:ProgramFiles\\Python312\\Scripts;$env:ProgramFiles\\Python312\\"
+
+# Dynamically locate python.exe
+$pythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue)?.Source
+if (-not $pythonExe) {
+    Write-Error "Python executable not found in PATH. Installation may have failed."
+    exit 1
+}
 
 Write-Host "Downloading files from GitHub..."
 $filesToDownload = @(
