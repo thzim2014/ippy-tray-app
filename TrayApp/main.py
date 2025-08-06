@@ -9,8 +9,10 @@ from datetime import datetime
 from pystray import Icon, Menu, MenuItem
 from PIL import Image
 from win10toast import ToastNotifier
-from settings_ui import show_settings_window
 import tkinter as tk
+from tkinter import ttk, messagebox
+from tkcalendar import DateEntry
+import requests
 
 # --- Ensure Dependencies ---
 def ensure_dependencies():
@@ -36,31 +38,45 @@ CONFIG_PATH = os.path.join(BASE_DIR, 'assets', 'config.ini')
 LOG_FILE = os.path.join(BASE_DIR, 'logs', 'ipchanges.log')
 ERROR_LOG = os.path.join(BASE_DIR, 'logs', 'error.log')
 ICON_PATH = os.path.join(BASE_DIR, 'assets', 'tray_app_icon.ico')
+VERSION_FILE = os.path.join(BASE_DIR, 'assets', 'version.txt')
+REMOTE_VERSION_URL = 'https://raw.githubusercontent.com/your/repo/main/assets/version.txt'
+REMOTE_MAIN_URL = 'https://raw.githubusercontent.com/your/repo/main/main.py'
 
 # --- Ensure Logs Directory ---
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 # --- Load or Prompt Config ---
-if not os.path.exists(CONFIG_PATH):
-    show_settings_window()
-
 config = configparser.ConfigParser()
+if not os.path.exists(CONFIG_PATH):
+    config['Settings'] = {
+        'target_ip': '127.0.0.1',
+        'check_interval': '60',
+        'notify_on_change': 'yes',
+        'enable_logging': 'yes',
+        'always_on_screen': 'no',
+        'window_alpha': '0.9',
+        'window_x': '100',
+        'window_y': '100'
+    }
+    with open(CONFIG_PATH, 'w') as f:
+        config.write(f)
 config.read(CONFIG_PATH)
 
-# --- Config Getters with Defaults ---
-def get_config():
-    return {
-        'target_ip': config.get('Settings', 'target_ip', fallback='127.0.0.1'),
-        'check_interval': config.getint('Settings', 'check_interval', fallback=60),
-        'notify_on_change': config.getboolean('Settings', 'notify_on_change', fallback=True),
-        'enable_logging': config.getboolean('Settings', 'enable_logging', fallback=True),
-        'always_on_screen': config.getboolean('Settings', 'always_on_screen', fallback=False),
-        'window_alpha': config.getfloat('Settings', 'window_alpha', fallback=0.9),
-        'window_x': config.getint('Settings', 'window_x', fallback=100),
-        'window_y': config.getint('Settings', 'window_y', fallback=100)
-    }
+def save_config():
+    with open(CONFIG_PATH, 'w') as f:
+        config.write(f)
 
-settings = get_config()
+settings = {
+    'target_ip': config.get('Settings', 'target_ip', fallback='127.0.0.1'),
+    'check_interval': config.getint('Settings', 'check_interval', fallback=60),
+    'notify_on_change': config.getboolean('Settings', 'notify_on_change', fallback=True),
+    'enable_logging': config.getboolean('Settings', 'enable_logging', fallback=True),
+    'always_on_screen': config.getboolean('Settings', 'always_on_screen', fallback=False),
+    'window_alpha': config.getfloat('Settings', 'window_alpha', fallback=0.9),
+    'window_x': config.getint('Settings', 'window_x', fallback=100),
+    'window_y': config.getint('Settings', 'window_y', fallback=100)
+}
+
 current_ip = None
 main_window = None
 window_open = False
@@ -105,7 +121,7 @@ def monitor_ip():
             last_logged_hour = now.hour
         time.sleep(settings['check_interval'])
 
-# --- Window ---
+# --- Floating Window ---
 def open_window():
     global main_window, window_open
     if window_open:
@@ -137,8 +153,7 @@ def open_window():
         main_window.geometry(f"+{x}+{y}")
         config['Settings']['window_x'] = str(x)
         config['Settings']['window_y'] = str(y)
-        with open(CONFIG_PATH, 'w') as f:
-            config.write(f)
+        save_config()
 
     label.bind("<ButtonPress-1>", start_move)
     label.bind("<B1-Motion>", do_move)
@@ -156,6 +171,122 @@ def toggle_window(icon, item):
     update_tray_menu()
 
 # --- Tray Setup ---
+def show_settings_window():
+    settings_win = tk.Tk()
+    settings_win.title("iPPY Settings")
+    settings_win.geometry("400x450")
+    settings_win.resizable(False, False)
+    try:
+        settings_win.iconbitmap(ICON_PATH)
+    except: pass
+
+    tab_control = ttk.Notebook(settings_win)
+    main_tab = ttk.Frame(tab_control)
+    window_tab = ttk.Frame(tab_control)
+    logs_tab = ttk.Frame(tab_control)
+    update_tab = ttk.Frame(tab_control)
+
+    tab_control.add(main_tab, text='Main')
+    tab_control.add(window_tab, text='App Window')
+    tab_control.add(logs_tab, text='Logs')
+    tab_control.add(update_tab, text='Updates')
+    tab_control.pack(expand=1, fill="both")
+
+    tk.Label(main_tab, text="Target IP:").pack()
+    ip_entry = tk.Entry(main_tab)
+    ip_entry.insert(0, config['Settings']['target_ip'])
+    ip_entry.pack()
+
+    tk.Label(main_tab, text="Checks per Minute (1–45):").pack()
+    interval_entry = tk.Entry(main_tab)
+    interval_entry.insert(0, config['Settings']['check_interval'])
+    interval_entry.pack()
+
+    notify_var = tk.BooleanVar(value=config.getboolean('Settings', 'notify_on_change'))
+    log_var = tk.BooleanVar(value=config.getboolean('Settings', 'enable_logging'))
+    screen_var = tk.BooleanVar(value=config.getboolean('Settings', 'always_on_screen'))
+
+    tk.Checkbutton(main_tab, text="Enable Notifications", variable=notify_var).pack(anchor="w")
+    tk.Checkbutton(main_tab, text="Enable Logging", variable=log_var).pack(anchor="w")
+    tk.Checkbutton(main_tab, text="Always on Screen", variable=screen_var).pack(anchor="w")
+
+    tk.Label(window_tab, text="Transparency (0.2 – 1.0):").pack()
+    alpha_slider = tk.Scale(window_tab, from_=0.2, to=1.0, resolution=0.01, orient="horizontal")
+    alpha_slider.set(float(config['Settings'].get('window_alpha', 0.85)))
+    alpha_slider.pack(fill="x")
+
+    def check_updates():
+        if not os.path.exists(VERSION_FILE):
+            local_version = "0.0.0"
+        else:
+            with open(VERSION_FILE) as vf:
+                local_version = vf.read().strip()
+
+        try:
+            r = requests.get(REMOTE_VERSION_URL, timeout=5)
+            remote_version = r.text.strip()
+        except:
+            messagebox.showerror("Error", "Could not reach update server.")
+            return
+
+        if remote_version != local_version:
+            if messagebox.askyesno("Update Available", f"Update found: {remote_version}\nDownload and apply?"):
+                try:
+                    new_code = requests.get(REMOTE_MAIN_URL, timeout=10).text
+                    with open(__file__, 'w') as mf:
+                        mf.write(new_code)
+                    with open(VERSION_FILE, 'w') as vf:
+                        vf.write(remote_version)
+                    messagebox.showinfo("Updated", "App updated. Please restart.")
+                    settings_win.destroy()
+                except Exception as e:
+                    messagebox.showerror("Error", f"Update failed: {e}")
+        else:
+            messagebox.showinfo("Up-to-date", "You are already on the latest version.")
+
+    tk.Button(update_tab, text="Check for Updates", command=check_updates).pack(pady=20)
+
+    def filter_logs():
+        keyword = change_only_var.get()
+        selected_date = log_date.get_date().strftime('%Y-%m-%d')
+        output_box.delete("1.0", tk.END)
+
+        if not os.path.exists(LOG_FILE):
+            output_box.insert(tk.END, "No logs found.")
+            return
+
+        with open(LOG_FILE, "r") as f:
+            for line in f:
+                if selected_date in line:
+                    if keyword:
+                        if "CHANGE" in line:
+                            output_box.insert(tk.END, line)
+                    else:
+                        output_box.insert(tk.END, line)
+
+    change_only_var = tk.BooleanVar()
+    tk.Checkbutton(logs_tab, text="Only show changes", variable=change_only_var).pack(anchor="w")
+    tk.Label(logs_tab, text="Select Date:").pack()
+    log_date = DateEntry(logs_tab, width=12, background='darkblue', foreground='white', borderwidth=2)
+    log_date.set_date(datetime.today())
+    log_date.pack(pady=5)
+    tk.Button(logs_tab, text="Load Logs", command=filter_logs).pack()
+    output_box = tk.Text(logs_tab, height=10)
+    output_box.pack(fill="both", expand=True, padx=5, pady=5)
+
+    def save():
+        config['Settings']['target_ip'] = ip_entry.get().strip()
+        config['Settings']['check_interval'] = str(max(1, min(45, int(interval_entry.get().strip() or 1))))
+        config['Settings']['notify_on_change'] = 'yes' if notify_var.get() else 'no'
+        config['Settings']['enable_logging'] = 'yes' if log_var.get() else 'no'
+        config['Settings']['always_on_screen'] = 'yes' if screen_var.get() else 'no'
+        config['Settings']['window_alpha'] = str(alpha_slider.get())
+        save_config()
+        settings_win.destroy()
+
+    tk.Button(settings_win, text="Save", command=save).pack(pady=10)
+    settings_win.mainloop()
+
 def on_settings(icon=None, item=None):
     show_settings_window()
 
@@ -187,7 +318,6 @@ def update_tray_menu():
         MenuItem("Exit", on_exit)
     )
     tray_icon.title = f"IP: {current_ip or 'Resolving...'}"
-
 
 def create_tray():
     global tray_icon
