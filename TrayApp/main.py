@@ -34,7 +34,7 @@ import traceback
 import webbrowser
 
 # --- Constants ---
-APP_DIR = r"C:\Tools\TrayApp"
+APP_DIR = r"C:\\Tools\\TrayApp"
 LOG_DIR = os.path.join(APP_DIR, "logs")
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
 CONFIG_PATH = os.path.join(ASSETS_DIR, "config.ini")
@@ -106,9 +106,7 @@ def log_ip(ip, changed, manual=False):
 
 def log_error(err):
     with open(ERROR_LOG_FILE, 'a') as f:
-        f.write(f"[{datetime.datetime.now()}] {str(err)}
-{traceback.format_exc()}
-")
+        f.write(f"[{datetime.datetime.now()}] {str(err)}\n{traceback.format_exc()}\n")
 
 # --- Toast Notification ---
 toaster = ToastNotifier()
