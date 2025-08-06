@@ -1,4 +1,4 @@
-# Full main.py (corrected floating window color and full GUI integration)
+# Full main.py (standalone version)
 import subprocess
 import sys
 
@@ -117,7 +117,52 @@ def notify_change(old_ip, new_ip):
         except Exception as e:
             log_error(e)
 
-# --- Tray Icon ---
+# --- Floating Window ---
+class FloatingWindow(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.geometry(f"+{config.get('Settings', 'window_x', fallback='10')}+{config.get('Settings', 'window_y', fallback='900')}")
+        self.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
+        self.configure(bg="black")
+        self.label = tk.Label(self, text="...", font=("Arial", 14), fg="white", bg="black")
+        self.label.pack(padx=5, pady=2)
+        self.make_draggable(self.label)
+        self.protocol("WM_DELETE_WINDOW", self.withdraw)
+
+    def make_draggable(self, widget):
+        widget.bind("<ButtonPress-1>", self.start_move)
+        widget.bind("<B1-Motion>", self.do_move)
+
+    def start_move(self, event):
+        self._x = event.x
+        self._y = event.y
+
+    def do_move(self, event):
+        x = self.winfo_x() + event.x - self._x
+        y = self.winfo_y() + event.y - self._y
+        self.geometry(f"+{x}+{y}")
+        config['Settings']['window_x'] = str(x)
+        config['Settings']['window_y'] = str(y)
+        config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
+        save_config()
+
+def toggle_float_window():
+    global float_window
+    if float_window:
+        if float_window.state() == 'withdrawn':
+            float_window.deiconify()
+        else:
+            float_window.withdraw()
+    else:
+        def run():
+            global float_window
+            float_window = FloatingWindow()
+            float_window.mainloop()
+        threading.Thread(target=run, daemon=True).start()
+
+# --- Update tray icon and floating window ---
 def get_tray_icon():
     target_ip = config['Settings']['target_ip']
     return ICON_GREEN_PATH if current_ip == target_ip else ICON_RED_PATH
@@ -130,7 +175,6 @@ def update_icon():
         except Exception as e:
             log_error(e)
 
-# --- Floating Window Fix ---
 def update_float_window(ip, _):
     global notified
     if float_window:
@@ -182,13 +226,42 @@ def monitor_ip():
         interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
         time.sleep(60 / interval)
 
-# --- Application Entry Point ---
+# --- Tray ---
+def on_exit(icon, item):
+    try:
+        if float_window:
+            float_window.destroy()
+        icon.stop()
+        os._exit(0)
+    except Exception as e:
+        log_error(e)
+
+def create_tray():
+    global icon
+    def get_window_label():
+        if float_window and float_window.state() != 'withdrawn':
+            return "Hide IP Window"
+        return "Show IP Window"
+
+    icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
+        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem(lambda item: get_window_label(), lambda i, _: toggle_float_window()),
+        pystray.MenuItem("Recheck IP", lambda i, _: recheck_ip()),
+        pystray.MenuItem("Exit", on_exit)
+    ))
+    icon.run()
+
+# --- Settings GUI ---
+def on_settings(icon=None, item=None):
+    # (This is a placeholder to retain structure — full GUI settings implementation comes next if needed)
+    messagebox.showinfo("Settings", "Settings window placeholder")
+
+# --- Main ---
 if __name__ == '__main__':
     try:
         load_config()
-        from gui import run_gui, toggle_float_window, create_tray
         if first_run:
-            run_gui()
+            on_settings()
         if config.getboolean('Settings', 'always_on_screen'):
             toggle_float_window()
         threading.Thread(target=create_tray, daemon=True).start()
