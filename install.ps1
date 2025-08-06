@@ -24,8 +24,12 @@ Expand-Archive -Path $pythonZip -DestinationPath $pythonDir -Force
 Remove-Item $pythonZip
 
 # Enable site module in embedded Python
-$pthFile = Get-ChildItem "$pythonDir\python*.pth" | Select-Object -First 1
-(gc $pthFile.FullName) -replace '^#?import site', 'import site' | sc $pthFile.FullName
+$pthFile = Get-ChildItem "$pythonDir\python*.pth" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($pthFile) {
+    (Get-Content $pthFile.FullName) -replace '^#?import site', 'import site' | Set-Content $pthFile.FullName
+} else {
+    Write-Host "⚠️ Could not locate python*.pth to enable 'import site'"
+}
 
 # Download your Python script and requirements.txt
 Invoke-WebRequest "$repoRoot/iPPY.py" -OutFile $scriptPath
@@ -51,3 +55,4 @@ $WshShell = New-Object -ComObject WScript.Shell
 $shortcut = $WshShell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $vbsPath
 $shortcut.Save()
+
