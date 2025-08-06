@@ -36,7 +36,10 @@ $env:Path += ";$env:ProgramFiles\\Python312\\Scripts;$env:ProgramFiles\\Python31
 $env:Path += ";$env:LocalAppData\\Programs\\Python\\Python312\\Scripts;$env:LocalAppData\\Programs\\Python\\Python312\\"
 
 # Dynamically locate python.exe from path or fallback locations
-$pythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue)?.Source
+$pythonCmd = Get-Command python.exe -ErrorAction SilentlyContinue
+if ($pythonCmd) {
+    $pythonExe = $pythonCmd.Source
+}
 
 if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
     $fallbacks = @( 
