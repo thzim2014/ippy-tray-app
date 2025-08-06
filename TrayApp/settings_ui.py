@@ -1,19 +1,29 @@
-# settings_ui.py - Settings Window with Tabs for Main, Window, Logs, and Update
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 import datetime
 import requests
 import os
+import configparser
 
-def launch(config, config_path, log_path, version_file, remote_version_url, remote_main_url, icon_path):
+def show_settings_window():
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    CONFIG_PATH = os.path.join(BASE_DIR, 'assets', 'config.ini')
+    LOG_PATH = os.path.join(BASE_DIR, 'logs', 'ipchanges.log')
+    VERSION_FILE = os.path.join(BASE_DIR, 'assets', 'version.txt')
+    REMOTE_VERSION_URL = 'https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/version.txt'
+    REMOTE_MAIN_URL = 'https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp/main.py'
+    ICON_PATH = os.path.join(BASE_DIR, 'assets', 'tray_app_icon.ico')
+
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+
     settings_win = tk.Tk()
     settings_win.title("iPPY Settings")
-    settings_win.geometry("400x450")
+    settings_win.geometry("400x480")
     settings_win.resizable(False, False)
     try:
-        settings_win.iconbitmap(icon_path)
+        settings_win.iconbitmap(ICON_PATH)
     except: pass
 
     tab_control = ttk.Notebook(settings_win)
@@ -59,11 +69,11 @@ def launch(config, config_path, log_path, version_file, remote_version_url, remo
         selected_date = log_date.get_date().strftime('%Y-%m-%d')
         output_box.delete("1.0", tk.END)
 
-        if not os.path.exists(log_path):
+        if not os.path.exists(LOG_PATH):
             output_box.insert(tk.END, "No logs found.")
             return
 
-        with open(log_path, "r") as f:
+        with open(LOG_PATH, "r") as f:
             for line in f:
                 if selected_date in line:
                     if keyword:
@@ -84,14 +94,14 @@ def launch(config, config_path, log_path, version_file, remote_version_url, remo
 
     # --- Updates Tab ---
     def check_updates():
-        if not os.path.exists(version_file):
+        if not os.path.exists(VERSION_FILE):
             local_version = "0.0.0"
         else:
-            with open(version_file) as vf:
+            with open(VERSION_FILE) as vf:
                 local_version = vf.read().strip()
 
         try:
-            r = requests.get(remote_version_url, timeout=5)
+            r = requests.get(REMOTE_VERSION_URL, timeout=5)
             remote_version = r.text.strip()
         except:
             messagebox.showerror("Error", "Could not reach update server.")
@@ -100,10 +110,10 @@ def launch(config, config_path, log_path, version_file, remote_version_url, remo
         if remote_version != local_version:
             if messagebox.askyesno("Update Available", f"Update found: {remote_version}\nDownload and apply?"):
                 try:
-                    new_code = requests.get(remote_main_url, timeout=10).text
-                    with open(os.path.join(os.path.dirname(config_path), 'main.py'), 'w') as mf:
+                    new_code = requests.get(REMOTE_MAIN_URL, timeout=10).text
+                    with open(os.path.join(BASE_DIR, 'main.py'), 'w') as mf:
                         mf.write(new_code)
-                    with open(version_file, 'w') as vf:
+                    with open(VERSION_FILE, 'w') as vf:
                         vf.write(remote_version)
                     messagebox.showinfo("Updated", "App updated. Please restart.")
                     settings_win.destroy()
@@ -122,7 +132,7 @@ def launch(config, config_path, log_path, version_file, remote_version_url, remo
         config['Settings']['enable_logging'] = 'yes' if log_var.get() else 'no'
         config['Settings']['always_on_screen'] = 'yes' if screen_var.get() else 'no'
         config['Settings']['window_alpha'] = str(alpha_slider.get())
-        with open(config_path, 'w') as f:
+        with open(CONFIG_PATH, 'w') as f:
             config.write(f)
         settings_win.destroy()
 
