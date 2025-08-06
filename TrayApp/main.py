@@ -255,7 +255,7 @@ def create_tray():
         return "Show IP Window"
 
     icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
-        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem("Settings", lambda icon, item: threading.Thread(target=on_settings).start()),
         pystray.MenuItem(lambda item: get_window_label(), lambda i, _: toggle_float_window()),
         pystray.MenuItem("Recheck IP", lambda i, _: recheck_ip()),
         pystray.MenuItem("Exit", on_exit)
