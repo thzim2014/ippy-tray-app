@@ -32,7 +32,7 @@ function Ensure-Folder {
 
 Ensure-Folder $installDir
 
-Write-Host "Downloading Python..."
+Write-Host "Downloading $url to $target"
 Download-File -url $pythonInstallerUrl -destination $pythonInstaller
 
 Write-Host "Installing Python..."
