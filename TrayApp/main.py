@@ -479,11 +479,11 @@ def on_settings(icon=None, item=None):
     # 💾 SAVE AND CLOSE
     # -----------------------
     def save_and_close():
-        config['Settings']['target_ip'] = ip_entry.get().strip()
-        config['Settings']['check_interval'] = str(max(1, min(45, int(interval_entry.get().strip() or 1))))
-        config['Settings']['notify_on_change'] = 'yes' if notify_var.get() else 'no'
-        config['Settings']['enable_logging'] = 'yes' if log_var.get() else 'no'
-        config['Settings']['always_on_screen'] = 'yes' if screen_var.get() else 'no'
+        config.set('Settings', 'target_ip', ip_entry.get().strip())
+        config.set('Settings', 'check_interval', str(max(1, min(45, int(interval_entry.get().strip() or 1)))))
+        config.set('Settings', 'notify_on_change', 'yes' if notify_var.get() else 'no')
+        config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
+        config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
         save_config()
         win.destroy()
 
