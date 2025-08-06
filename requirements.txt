@@ -1,0 +1,3 @@
+requests
+pillow
+win10toast
