@@ -1,5 +1,10 @@
 tk
+
 requests
+
 pillow
+
 win10toast
+
 pystray
+
