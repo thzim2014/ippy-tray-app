@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
+$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/"
 $installDir = "C:\Tools\TrayApp"
 $startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $shortcutName = "TrayApp.lnk"
