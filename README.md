@@ -22,16 +22,28 @@ A lightweight, Python-based system tray application that monitors your public IP
 
 ## 🔧 Installation
 
-### One-line Install
+### 🆕 One-Line Install (Modern Systems)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "irm 'https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/install.ps1' | iex"
 ```
 
-### For Older Systems (Enable TLS 1.2)
+### 🖥️ Fix for Older Windows Systems (pre-TLS 1.2)
+
+Run this first to enable TLS 1.2 and strong crypto:
 
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+```
+```
+Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319' -Name 'SchUseStrongCrypto' -Value 1 -Type DWord
+Set-ItemProperty -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319' -Name 'SchUseStrongCrypto' -Value 1 -Type DWord
+```
+
+Then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "irm 'https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/install.ps1' | iex"
 ```
 
 ---
