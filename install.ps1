@@ -1,41 +1,76 @@
-$ErrorActionPreference = 'Stop'
+# Set strict mode
+Set-StrictMode -Version Latest
 
 # Configuration
-$installDir = "C:\Tools\iPPY"
+$repoRoot = "https://raw.githubusercontent.com/YourUsername/YourRepoName/main"
+$installDir = "C:\Tools\TrayApp"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
-$installerPath = "$env:TEMP\python_installer.exe"
-$repoZipUrl = "https://github.com/GoblinRules/ippy-tray-app/archive/refs/heads/main.zip"
-$repoZipPath = "$env:TEMP\ippy.zip"
+$pythonInstaller = "$env:TEMP\python-installer.exe"
+$requirementsFile = "$installDir\requirements.txt"
+$shortcutName = "TrayApp.lnk"
+$vbscriptPath = "$installDir\launcher.vbs"
+$pyScript = "$installDir\main.py"
+$pythonExe = "$env:ProgramFiles\Python312\python.exe"
+$startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 
-# Ensure install directory exists
-New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+# Helper: BITS download
+function Download-File {
+    param ($url, $destination)
+    Start-BitsTransfer -Source $url -Destination $destination -ErrorAction Stop
+}
 
-Write-Host "`n[+] Downloading full Python installer..."
-bitsadmin /transfer "ipyppy" /priority normal $pythonInstallerUrl $installerPath | Out-Null
+# Helper: Ensure Folder Exists
+function Ensure-Folder {
+    param ($path)
+    if (-not (Test-Path $path)) {
+        New-Item -ItemType Directory -Path $path | Out-Null
+    }
+}
 
-Write-Host "`n[+] Installing Python silently..."
-Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 TargetDir=`"$installDir\Python`"" -Wait
+# 1. Ensure target folder
+Ensure-Folder -path $installDir
 
-Write-Host "`n[+] Installing dependencies..."
-& "$installDir\Python\python.exe" -m pip install --upgrade pip
-& "$installDir\Python\python.exe" -m pip install -r "$installDir\requirements.txt" -q
+# 2. Download Python installer
+Write-Host "Downloading Python installer..."
+Download-File -url $pythonInstallerUrl -destination $pythonInstaller
 
-Write-Host "`n[+] Downloading application files..."
-Invoke-WebRequest -Uri $repoZipUrl -OutFile $repoZipPath
-Expand-Archive $repoZipPath -DestinationPath $installDir -Force
-Move-Item "$installDir\ippy-tray-app-main\*" "$installDir" -Force
-Remove-Item "$installDir\ippy-tray-app-main", $repoZipPath, $installerPath -Recurse -Force
+# 3. Install Python silently
+Write-Host "Installing Python..."
+Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
+Remove-Item $pythonInstaller -Force
 
-Write-Host "`n[+] Creating VBS launcher..."
-$vbscript = @'
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run chr(34) & "C:\Tools\iPPY\Python\python.exe" & chr(34) & " C:\Tools\iPPY\iPPY.py", 0
-Set WshShell = Nothing
-'@
-Set-Content -Path "$installDir\launch_silent.vbs" -Value $vbscript -Encoding ASCII
+# 4. Add Python to path if not already
+$env:Path += ";$env:ProgramFiles\Python312\Scripts;$env:ProgramFiles\Python312\"
 
-Write-Host "`n[+] Creating Startup shortcut..."
-$startupShortcut = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.vbs"
-Copy-Item "$installDir\launch_silent.vbs" $startupShortcut -Force
+# 5. Download required files from GitHub
+Write-Host "Downloading files from GitHub..."
 
-Write-Host "`n[✓] Setup complete. iPPY will run silently at login."
+$filesToDownload = @(
+    "main.py",
+    "requirements.txt",
+    "launcher.vbs",
+    "config.ini"
+)
+
+foreach ($file in $filesToDownload) {
+    $url = "$repoRoot/$file"
+    $destination = Join-Path $installDir $file
+    Write-Host "Downloading $file..."
+    Download-File -url $url -destination $destination
+}
+
+# 6. Install pip dependencies
+Write-Host "Installing Python dependencies..."
+& $pythonExe -m pip install --upgrade pip setuptools wheel
+& $pythonExe -m pip install -r $requirementsFile
+
+# 7. Create shortcut in Startup folder
+$WScriptShell = New-Object -ComObject WScript.Shell
+$shortcut = $WScriptShell.CreateShortcut("$startupFolder\$shortcutName")
+$shortcut.TargetPath = "wscript.exe"
+$shortcut.Arguments = "`"$vbscriptPath`""
+$shortcut.WorkingDirectory = $installDir
+$shortcut.IconLocation = "$installDir\icon.ico"
+$shortcut.Save()
+
+Write-Host "Setup complete. The app will launch on next login."
