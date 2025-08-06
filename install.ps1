@@ -1,6 +1,4 @@
 Set-StrictMode -Version Latest
-# Force TLS 1.2 (required for GitHub)
-#[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
 $installDir = "C:\\Tools\\TrayApp"
