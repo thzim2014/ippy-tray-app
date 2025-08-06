@@ -76,9 +76,9 @@ Write-Host "Creating startup shortcut..."
 $WshShell = New-Object -ComObject WScript.Shell
 $shortcut = $WshShell.CreateShortcut("$startupFolder\\$shortcutName")
 $shortcut.TargetPath = "wscript.exe"
-$shortcut.Arguments = '"' + $vbscriptPath + '"'
+$shortcut.Arguments = "`"$vbscriptPath`""
 $shortcut.WorkingDirectory = $installDir
-$shortcut.IconLocation = "$installDir\\icon.ico"
+$shortcut.IconLocation = "$installDir\icon.ico"
 $shortcut.Save()
 
 Write-Host "Install complete. App will run on next login."
