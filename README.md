@@ -1,4 +1,4 @@
-# 🛰️ IP Tray App Installer
+# 🛰️ IP Python Tray App
 
 ![Tray App Icon](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/icon.png)
 
