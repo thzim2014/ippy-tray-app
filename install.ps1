@@ -2,17 +2,20 @@ Set-StrictMode -Version Latest
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
+$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main"
 $installDir = "C:\\Tools\\TrayApp"
+$assetsDir = "$installDir\\assets"
+$logsDir = "$installDir\\logs"
 $startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 $shortcutName = "TrayApp.lnk"
 $pythonInstaller = "$env:TEMP\\python-installer.exe"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
 $getPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 $getPipScript = "$env:TEMP\\get-pip.py"
-$requirementsFile = "$installDir\\requirements.txt"
-$vbscriptPath = "$installDir\\launcher.vbs"
+$requirementsFile = "$assetsDir\\requirements.txt"
+$vbscriptPath = "$assetsDir\\launcher.vbs"
 $pyScript = "$installDir\\main.py"
+$iconPath = "$assetsDir\\tray_app_icon.ico"
 
 function Download-File {
     param (
@@ -35,6 +38,8 @@ function Ensure-Folder {
 }
 
 Ensure-Folder $installDir
+Ensure-Folder $assetsDir
+Ensure-Folder $logsDir
 
 Write-Host "Downloading Python..."
 Download-File -url $pythonInstallerUrl -destination $pythonInstaller
@@ -93,10 +98,18 @@ try {
 }
 
 Write-Host "Downloading app files..."
-$files = @("main.py", "requirements.txt", "launcher.vbs", "config.ini")
-foreach ($file in $files) {
-    $url = "$repoRoot/$file"
+$rootFiles = @("main.py", "settings_ui.py")
+$assetFiles = @("config.ini", "requirements.txt", "launcher.vbs", "tray_app_icon.ico", "version.txt")
+
+foreach ($file in $rootFiles) {
+    $url = "$repoRoot/TrayApp/$file"
     $target = Join-Path $installDir $file
+    Download-File -url $url -destination $target
+}
+
+foreach ($file in $assetFiles) {
+    $url = "$repoRoot/assets/$file"
+    $target = Join-Path $assetsDir $file
     Download-File -url $url -destination $target
 }
 
@@ -120,7 +133,7 @@ $shortcut = $WshShell.CreateShortcut("$startupFolder\\$shortcutName")
 $shortcut.TargetPath = "wscript.exe"
 $shortcut.Arguments = '"' + $vbscriptPath + '"'
 $shortcut.WorkingDirectory = $installDir
-$shortcut.IconLocation = "$installDir\\icon.ico"
+$shortcut.IconLocation = "$iconPath"
 $shortcut.Save()
 
 Write-Host "Install complete. App will run on next login."
