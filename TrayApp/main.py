@@ -1,4 +1,4 @@
-# Full main.py (standalone version)
+# Full main.py (standalone version with Logs tab, Update tab, sortable logs, search, export, and settings GUI)
 import subprocess
 import sys
 
@@ -26,7 +26,7 @@ import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image
 import configparser
 from win10toast import ToastNotifier
 import csv
@@ -148,6 +148,7 @@ class FloatingWindow(tk.Tk):
         config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
         save_config()
 
+# --- UI logic ---
 def toggle_float_window():
     global float_window
     if float_window:
@@ -162,7 +163,6 @@ def toggle_float_window():
             float_window.mainloop()
         threading.Thread(target=run, daemon=True).start()
 
-# --- Update tray icon and floating window ---
 def get_tray_icon():
     target_ip = config['Settings']['target_ip']
     return ICON_GREEN_PATH if current_ip == target_ip else ICON_RED_PATH
@@ -190,7 +190,6 @@ def update_float_window(ip, _):
             float_window.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
             notified = False
 
-# --- Recheck Logic ---
 def recheck_ip():
     global last_manual_check, current_ip
     now = time.time()
@@ -206,7 +205,6 @@ def recheck_ip():
             update_icon()
             log_ip(new_ip, changed, manual=True)
 
-# --- Monitor IP Loop ---
 def monitor_ip():
     global current_ip
     while True:
@@ -226,7 +224,6 @@ def monitor_ip():
         interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
         time.sleep(60 / interval)
 
-# --- Tray ---
 def on_exit(icon, item):
     try:
         if float_window:
@@ -251,10 +248,142 @@ def create_tray():
     ))
     icon.run()
 
-# --- Settings GUI ---
+# --- Settings GUI + Logs + Update ---
 def on_settings(icon=None, item=None):
-    # (This is a placeholder to retain structure — full GUI settings implementation comes next if needed)
-    messagebox.showinfo("Settings", "Settings window placeholder")
+    from tkinter import BooleanVar, StringVar
+
+    win = tk.Tk()
+    win.title("iPPY Settings")
+    win.geometry("800x500")
+
+    tabs = ttk.Notebook(win)
+    main = ttk.Frame(tabs)
+    logs = ttk.Frame(tabs)
+    update = ttk.Frame(tabs)
+    tabs.add(main, text="Main")
+    tabs.add(logs, text="Logs")
+    tabs.add(update, text="Update")
+    tabs.pack(expand=1, fill='both')
+
+    # Main Tab
+    tk.Label(main, text="IP To Monitor:").pack()
+    ip_entry = tk.Entry(main)
+    ip_entry.insert(0, config['Settings']['target_ip'])
+    ip_entry.pack()
+
+    tk.Label(main, text="Checks per Minute (1-45):").pack()
+    interval_entry = tk.Entry(main)
+    interval_entry.insert(0, config['Settings']['check_interval'])
+    interval_entry.pack()
+
+    notify_var = BooleanVar(value=config.getboolean('Settings', 'notify_on_change'))
+    log_var = BooleanVar(value=config.getboolean('Settings', 'enable_logging'))
+    screen_var = BooleanVar(value=config.getboolean('Settings', 'always_on_screen'))
+
+    tk.Checkbutton(main, text="Enable Notifications", variable=notify_var).pack(anchor='w')
+    tk.Checkbutton(main, text="Enable Logging", variable=log_var).pack(anchor='w')
+    tk.Checkbutton(main, text="Always on Screen", variable=screen_var).pack(anchor='w')
+
+    # Logs Tab
+    filter_var = BooleanVar()
+    search_var = StringVar()
+
+    search_entry = tk.Entry(logs, textvariable=search_var)
+    search_entry.pack(fill='x')
+
+    log_table = ttk.Treeview(logs, columns=('Date', 'Time', 'Expected', 'Detected', 'Changed', 'Manual'), show='headings')
+    for col in log_table['columns']:
+        log_table.heading(col, text=col, command=lambda c=col: sort_table(c, False))
+        log_table.column(col, width=100)
+    log_table.pack(expand=True, fill='both')
+
+    def sort_table(col, reverse):
+        data = [(log_table.set(k, col), k) for k in log_table.get_children('')]
+        data.sort(reverse=reverse)
+        for index, (val, k) in enumerate(data):
+            log_table.move(k, '', index)
+        log_table.heading(col, command=lambda: sort_table(col, not reverse))
+
+    def refresh_logs():
+        log_table.delete(*log_table.get_children())
+        if os.path.exists(LOG_FILE):
+            with open(LOG_FILE, 'r') as f:
+                for row in csv.reader(f, delimiter='|'):
+                    if len(row) == 6:
+                        if filter_var.get() and row[4] != 'Yes':
+                            continue
+                        if search_var.get().lower() not in '|'.join(row).lower():
+                            continue
+                        log_table.insert('', 'end', values=row)
+
+    tk.Checkbutton(logs, text="Only show changed", variable=filter_var, command=refresh_logs).pack(anchor='w')
+    tk.Button(logs, text="Export to CSV", command=lambda: export_logs(log_table)).pack(anchor='e', pady=2, padx=2)
+    search_var.trace_add('write', lambda *_: refresh_logs())
+    refresh_logs()
+
+    def export_logs(table):
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        if not path:
+            return
+        with open(path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Date', 'Time', 'Expected IP', 'Detected IP', 'Changed', 'Manual'])
+            for child in table.get_children():
+                writer.writerow(table.item(child)['values'])
+
+    # Purge section
+    purge_frame = tk.Frame(logs)
+    purge_frame.pack(pady=5)
+    tk.Label(purge_frame, text="Purge logs older than:").pack(side='left')
+    for months in [1, 2, 3]:
+        tk.Button(purge_frame, text=f"{months}m", command=lambda m=months: (purge_logs(m), refresh_logs())).pack(side='left', padx=5)
+
+    def purge_logs(months):
+        cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
+        with open(LOG_FILE, 'r') as f:
+            rows = list(csv.reader(f, delimiter='|'))
+        filtered = [row for row in rows if datetime.datetime.strptime(row[0], '%d/%m/%Y') >= cutoff]
+        with open(LOG_FILE, 'w', newline='') as f:
+            writer = csv.writer(f, delimiter='|')
+            writer.writerows(filtered)
+
+    # Update Tab
+    update_status = tk.Label(update, text="Checking version...")
+    update_status.pack(pady=10)
+    update_button = tk.Button(update, text="Update Now", state='disabled', command=lambda: perform_update(update_status))
+    update_button.pack()
+
+    def check_for_update():
+        try:
+            with open(VERSION_PATH, 'r') as f:
+                local = f.read().strip()
+            remote = requests.get(REMOTE_VERSION_URL).text.strip()
+            if remote > local:
+                update_status.config(text=f"New version {remote} available")
+                update_button.config(state='normal')
+            else:
+                update_status.config(text="You are up to date.")
+        except Exception as e:
+            update_status.config(text="Error checking version")
+            log_error(e)
+
+    def perform_update(status):
+        webbrowser.open("https://github.com/GoblinRules/ippy-tray-app")
+        status.config(text="Manual update required.")
+
+    check_for_update()
+
+    def save_and_close():
+        config['Settings']['target_ip'] = ip_entry.get().strip()
+        config['Settings']['check_interval'] = str(max(1, min(45, int(interval_entry.get().strip() or 1))))
+        config['Settings']['notify_on_change'] = 'yes' if notify_var.get() else 'no'
+        config['Settings']['enable_logging'] = 'yes' if log_var.get() else 'no'
+        config['Settings']['always_on_screen'] = 'yes' if screen_var.get() else 'no'
+        save_config()
+        win.destroy()
+
+    tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
+    win.mainloop()
 
 # --- Main ---
 if __name__ == '__main__':
