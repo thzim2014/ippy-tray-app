@@ -36,14 +36,17 @@ toaster = ToastNotifier()
 
 # Constants
 APP_DIR = r"C:\\Tools\\TrayApp"
+ASSETS_DIR = os.path.join(APP_DIR, "assets")
 LOG_DIR = os.path.join(APP_DIR, "logs")
-CONFIG_PATH = os.path.join(APP_DIR, "config.ini")
+CONFIG_PATH = os.path.join(ASSETS_DIR, "config.ini")
+ICON_PATH = os.path.join(ASSETS_DIR, "tray_app_icon.ico")
 IP_API_URL = "http://ip-api.com/json/"
 DEFAULT_IP = "0.0.0.0"
 
 # Ensure folders exist
 os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(ASSETS_DIR, exist_ok=True)
 
 # Global state
 current_ip = None
@@ -54,6 +57,7 @@ notified = False
 last_manual_check = 0
 first_run = False
 float_thread = None
+last_logged_hour = None
 
 # Default config
 default_config = {
@@ -94,11 +98,21 @@ def get_ip():
 
 
 def log_ip(ip, changed):
-    if config.getboolean('Settings', 'enable_logging', fallback=True):
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_file = os.path.join(LOG_DIR, f"{datetime.date.today()}.log")
+    global last_logged_hour
+    if not config.getboolean('Settings', 'enable_logging', fallback=True):
+        return
+    now = datetime.datetime.now()
+    timestamp = now.strftime('%Y-%m-%d %H:%M:%S')
+    log_file = os.path.join(LOG_DIR, f"ipchanges.log")
+    current_hour = now.hour
+
+    if changed or last_logged_hour != current_hour:
         with open(log_file, 'a') as f:
-            f.write(f"[{now}] {ip} {'CHANGE' if changed else ''}\n")
+            if changed:
+                f.write(f"[{timestamp}] IP changed to {ip}\n")
+            else:
+                f.write(f"[{timestamp}] No change detected. IP is still {ip}\n")
+        last_logged_hour = current_hour
 
 
 def notify_change(old_ip, new_ip):
@@ -266,7 +280,7 @@ class FloatingWindow(tk.Tk):
         save_config()
 
 
-if '--settings' in sys.argv:
+if __name__ == "--settings" or '--settings' in sys.argv:
     load_config()
     settings_win = tk.Tk()
     settings_win.title("iPPY Settings")
