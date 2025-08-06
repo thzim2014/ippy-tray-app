@@ -5,52 +5,34 @@ $ErrorActionPreference = "Stop"
 # -------------------------
 $repoRoot      = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main"
 $toolsDir      = "C:\Tools\iPPY"
-$pythonUrl     = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-embed-amd64.zip"
-$pythonZip     = "$env:TEMP\python_embed.zip"
-$pythonDir     = "$toolsDir\Python"
+$installerUrl  = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
+$installerPath = "$env:TEMP\python_installer.exe"
 $scriptPath    = "$toolsDir\iPPY.py"
 $reqsPath      = "$toolsDir\requirements.txt"
 $vbsPath       = "$toolsDir\launch_ippy.vbs"
 $shortcutPath  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.lnk"
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# -------------------------
+# Download and install Python
+# -------------------------
+Write-Host "[*] Downloading full Python installer..."
+Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+
+Write-Host "[*] Installing Python silently..."
+Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_tcltk=1" -Wait
+Remove-Item $installerPath
 
 # -------------------------
-# Create directories
+# Resolve Python paths
+# -------------------------
+$pythonExe = (Get-Command python.exe).Source
+$pythonDir = Split-Path -Parent $pythonExe
+$pipExe    = Join-Path $pythonDir "Scripts\pip.exe"
+
+# -------------------------
+# Create tools directory
 # -------------------------
 New-Item -Force -ItemType Directory -Path $toolsDir | Out-Null
-New-Item -Force -ItemType Directory -Path $pythonDir | Out-Null
-
-# -------------------------
-# Download embedded Python
-# -------------------------
-Write-Host "[*] Downloading embedded Python..."
-Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonZip
-
-if (!(Test-Path $pythonZip)) {
-    Write-Error "❌ Failed to download Python zip file."
-    exit 1
-}
-
-Expand-Archive -Path $pythonZip -DestinationPath $pythonDir -Force
-Remove-Item $pythonZip
-
-# -------------------------
-# Always create ._pth and enable site
-# -------------------------
-$pyZip = Get-ChildItem "$pythonDir\python*.zip" | Select-Object -First 1
-if (!$pyZip) { Write-Error "Python zip not found"; exit 1 }
-
-$ver = $pyZip.Name -replace '\.zip$', ''
-$pthPath = "$pythonDir\$ver._pth"
-
-@"
-$ver.zip
-.
-import site
-"@ | Set-Content -Encoding ASCII -Path $pthPath
-
-Write-Host "[*] Created $ver._pth with 'import site' enabled"
 
 # -------------------------
 # Download script and requirements.txt
@@ -60,38 +42,19 @@ Invoke-WebRequest "$repoRoot/iPPY.py" -OutFile $scriptPath
 Invoke-WebRequest "$repoRoot/requirements.txt" -OutFile $reqsPath
 
 # -------------------------
-# Install pip
+# Install dependencies
 # -------------------------
-Write-Host "[*] Installing pip..."
-Invoke-WebRequest "https://bootstrap.pypa.io/get-pip.py" -OutFile "$toolsDir\get-pip.py"
-& "$pythonDir\python.exe" "$toolsDir\get-pip.py"
-Remove-Item "$toolsDir\get-pip.py"
+Write-Host "[*] Installing dependencies..."
+& $pipExe install --upgrade pip setuptools
+& $pipExe install -r $reqsPath
 
 # -------------------------
-# Force install setuptools + deps
-# -------------------------
-Write-Host "[*] Installing setuptools and requirements..."
-& "$pythonDir\Scripts\pip.exe" install --force-reinstall setuptools
-& "$pythonDir\Scripts\pip.exe" install --upgrade pip
-& "$pythonDir\Scripts\pip.exe" install -r $reqsPath
-
-# -------------------------
-# Test pkg_resources
-# -------------------------
-try {
-    & "$pythonDir\python.exe" -c "import pkg_resources" | Out-Null
-    Write-Host "[*] pkg_resources is working."
-} catch {
-    Write-Error "❌ pkg_resources still not available!"
-}
-
-# -------------------------
-# Create silent VBS launcher
+# Create VBS launcher (no console)
 # -------------------------
 Write-Host "[*] Creating VBS launcher..."
 @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run Chr(34) & "$pythonDir\python.exe" & Chr(34) & " " & Chr(34) & "$scriptPath" & Chr(34), 0, False
+WshShell.Run Chr(34) & "$pythonExe" & Chr(34) & " " & Chr(34) & "$scriptPath" & Chr(34), 0, False
 "@ | Out-File -Encoding ASCII $vbsPath
 
 # -------------------------
@@ -104,9 +67,9 @@ $shortcut.TargetPath = $vbsPath
 $shortcut.Save()
 
 # -------------------------
-# Auto-launch app now
+# Launch app now
 # -------------------------
 Write-Host "[*] Launching app..."
 Start-Process -WindowStyle Hidden "$vbsPath"
 
-Write-Host "`n✅ iPPY installed, dependencies loaded, and app launched silently."
+Write-Host "`n✅ Full Python installed, iPPY launched, and set to run at login."
