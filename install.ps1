@@ -6,6 +6,8 @@ $startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startu
 $shortcutName = "TrayApp.lnk"
 $pythonInstaller = "$env:TEMP\\python-installer.exe"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
+$getPipUrl = "https://bootstrap.pypa.io/get-pip.py"
+$getPipScript = "$env:TEMP\\get-pip.py"
 $requirementsFile = "$installDir\\requirements.txt"
 $vbscriptPath = "$installDir\\launcher.vbs"
 $pyScript = "$installDir\\main.py"
@@ -39,10 +41,11 @@ Write-Host "Installing Python..."
 Start-Process -FilePath "$pythonInstaller" -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'TargetDir="C:\\Program Files\\Python312"' -Wait
 Remove-Item $pythonInstaller -Force
 
-# Prepare for Python lookup
+# Prepare path
 $env:Path += ";C:\\Program Files\\Python312\\Scripts;C:\\Program Files\\Python312\\"
 $env:Path += ";$env:LOCALAPPDATA\\Programs\\Python\\Python312\\Scripts;$env:LOCALAPPDATA\\Programs\\Python\\Python312\\"
 
+# Locate Python
 $pythonExe = $null
 $pythonCmd = Get-Command python.exe -ErrorAction SilentlyContinue
 if ($pythonCmd) {
@@ -68,6 +71,16 @@ if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
     exit 1
 }
 
+# Install pip if pkg_resources is missing
+try {
+    & $pythonExe -c "import pkg_resources" 2>$null
+} catch {
+    Write-Host "Installing pip manually..."
+    Download-File -url $getPipUrl -destination $getPipScript
+    & $pythonExe $getPipScript
+    Remove-Item $getPipScript -Force
+}
+
 Write-Host "Downloading app files..."
 $files = @("main.py", "requirements.txt", "launcher.vbs", "config.ini")
 foreach ($file in $files) {
@@ -90,3 +103,4 @@ $shortcut.IconLocation = "$installDir\\icon.ico"
 $shortcut.Save()
 
 Write-Host "Install complete. App will run on next login."
+exit 0
