@@ -1,54 +1,72 @@
-Write-Host "[*] Downloading full Python installer..."
+# install.ps1
+
+Write-Host "`n[*] Creating folder structure..."
+$appFolder = "C:\Tools\iPPY"
+$pythonFolder = "$appFolder\Python"
+$startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+
+New-Item -ItemType Directory -Force -Path $appFolder | Out-Null
+New-Item -ItemType Directory -Force -Path $pythonFolder | Out-Null
+
+# Download and install full Python silently
+Write-Host "`n[*] Downloading full Python installer..."
 $installerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
-$installerPath = "$env:TEMP\python-installer.exe"
+$installerPath = "$env:TEMP\python_installer.exe"
 
-bitsadmin /transfer "ipyppy" /priority normal "$installerUrl" "$installerPath"
+# Use bitsadmin to download Python installer
+bitsadmin /transfer "pydl" /priority normal "$installerUrl" "$installerPath"
 
-Write-Host "`n[*] Installing Python silently..."
-Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_tcltk=1" -Wait
-
-# Locate installed python.exe
-$pythonExe = Get-ChildItem -Path "$env:LocalAppData\Programs\Python" -Recurse -Filter python.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
-if (-not $pythonExe) {
-    Write-Host "❌ Failed to find python.exe. Aborting."
-    exit 1
+while (-not (Test-Path $installerPath)) {
+    Start-Sleep -Milliseconds 500
 }
 
-$pipExe = Join-Path (Split-Path $pythonExe) "Scripts\pip.exe"
+Write-Host "`n[*] Installing Python silently..."
+Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 TargetDir=$pythonFolder" -Wait
 
+# Ensure pip works and install required modules
 Write-Host "`n[*] Installing dependencies..."
-& $pipExe install --no-warn-script-location requests pillow pystray win10toast charset-normalizer idna urllib3 six pywin32
+$pythonExe = "$pythonFolder\python.exe"
+$requirements = @("requests", "pillow", "pystray", "pywin32", "win10toast", "charset_normalizer", "urllib3", "idna", "six")
+
+foreach ($package in $requirements) {
+    & $pythonExe -m pip install $package
+}
 
 # Download app files from GitHub
 Write-Host "`n[*] Downloading app source..."
 $zipUrl = "https://github.com/GoblinRules/ippy-tray-app/archive/refs/heads/main.zip"
 $zipPath = "$env:TEMP\ippy.zip"
-$appFolder = "C:\Tools\iPPY"
 $tempExtract = "$env:TEMP\ippy-extract"
 
-# Clean up any previous failed attempts
-Remove-Item -Force -Recurse $appFolder -ErrorAction SilentlyContinue
 Remove-Item -Force -Recurse $tempExtract -ErrorAction SilentlyContinue
+Remove-Item -Force -Recurse "$appFolder\*" -ErrorAction SilentlyContinue
 
 bitsadmin /transfer "ippyZip" /priority normal "$zipUrl" "$zipPath"
+
+while (-not (Test-Path $zipPath)) {
+    Start-Sleep -Milliseconds 500
+}
+
 Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
 Copy-Item "$tempExtract\ippy-tray-app-main\*" -Destination $appFolder -Recurse -Force
 
-# Create VBScript launcher
+# Create VBS launcher to run silently
 Write-Host "`n[*] Creating VBS launcher..."
-$launcherVbs = "$appFolder\launch_silent.vbs"
-$launcherContent = @"
+$vbsPath = "$appFolder\launch_silent.vbs"
+$vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run """$pythonExe"" ""$appFolder\iPPY.py""", 0, False
+WshShell.Run chr(34) & "$pythonExe" & chr(34) & " "$appFolder\iPPY.py"", 0
+Set WshShell = Nothing
 "@
-Set-Content -Path $launcherVbs -Value $launcherContent -Encoding ASCII
+$vbsContent | Out-File -Encoding ASCII -FilePath $vbsPath
 
-# Create shortcut in Startup folder
-Write-Host "`n[*] Creating Startup shortcut..."
-$shortcutPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.lnk"
-$WshShell = New-Object -ComObject WScript.Shell
-$shortcut = $WshShell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $launcherVbs
+# Add to Startup
+Write-Host "`n[*] Adding to Startup folder..."
+$shortcutPath = "$startupFolder\iPPY.lnk"
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = $vbsPath
+$shortcut.WorkingDirectory = $appFolder
 $shortcut.Save()
 
-Write-Host "`n✅ Setup complete. iPPY will run silently at login."
+Write-Host "`n✓ Setup complete. iPPY will run silently at login."
