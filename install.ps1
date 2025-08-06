@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$repoRoot = "LOCAL"
+$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
 $installDir = "C:\Tools\TrayApp"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
 $pythonInstaller = "$env:TEMP\python-installer.exe"
@@ -34,8 +34,20 @@ Remove-Item $pythonInstaller -Force
 
 $env:Path += ";$env:ProgramFiles\Python312\Scripts;$env:ProgramFiles\Python312\"
 
-Write-Host "Copying files locally..."
-Copy-Item ".\TrayApp\*" -Destination $installDir -Recurse -Force
+Write-Host "Downloading files from GitHub..."
+$filesToDownload = @(
+    "main.py",
+    "requirements.txt",
+    "launcher.vbs",
+    "config.ini"
+)
+
+foreach ($file in $filesToDownload) {
+    $url = "$repoRoot/$file"
+    $destination = Join-Path $installDir $file
+    Write-Host "Downloading $file..."
+    Download-File -url $url -destination $destination
+}
 
 Write-Host "Installing Python dependencies..."
 & $pythonExe -m pip install --upgrade pip setuptools wheel
