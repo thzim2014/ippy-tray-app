@@ -6,7 +6,7 @@ import sys
 def ensure_dependencies():
     try:
         import pkg_resources
-        required = {'requests', 'pystray', 'Pillow', 'win10toast', 'setuptools'}
+        required = {'tk','requests', 'pystray', 'Pillow', 'win10toast', 'setuptools'}
         installed = {pkg.key for pkg in pkg_resources.working_set}
         missing = required - installed
         if missing:
@@ -35,7 +35,7 @@ from win10toast import ToastNotifier
 toaster = ToastNotifier()
 
 # Constants
-APP_DIR = r"C:\\Tools\\iPPY"
+APP_DIR = r"C:\\Tools\\TrayApp"
 LOG_DIR = os.path.join(APP_DIR, "logs")
 CONFIG_PATH = os.path.join(APP_DIR, "config.ini")
 IP_API_URL = "http://ip-api.com/json/"
