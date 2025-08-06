@@ -17,7 +17,8 @@ $shortcutPath  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPP
 # -------------------------
 Write-Host "[*] Downloading full Python installer..."
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+#Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+Start-Process curl.exe -ArgumentList @("-L", "$installerUrl", "-o", "$installerPath") -NoNewWindow -Wait
 
 Write-Host "[*] Installing Python silently..."
 Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_tcltk=1" -Wait
@@ -74,4 +75,5 @@ Write-Host "[*] Launching app..."
 Start-Process -WindowStyle Hidden "$vbsPath"
 
 Write-Host "`n✅ Full Python installed, iPPY launched, and set to run at login."
+
 
