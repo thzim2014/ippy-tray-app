@@ -2,7 +2,7 @@
 
 ![Tray App Icon](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/icon.png)
 
-A lightweight, Python-based system tray application to monitor the public IP address of a specific target (e.g., remote device, server, etc.). Displays changes, logs them, and optionally notifies the user.
+A lightweight, Python-based system tray application to monitor the public IP address of your computer. Displays changes, logs them, and optionally notifies the user.
 
 ---
 
