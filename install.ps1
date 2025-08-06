@@ -1,14 +1,14 @@
 Set-StrictMode -Version Latest
 
 $repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
-$installDir = "C:\\Tools\\TrayApp"
-$startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+$installDir = "C:\Tools\TrayApp"
+$startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $shortcutName = "TrayApp.lnk"
-$pythonInstaller = "$env:TEMP\\python-installer.exe"
+$pythonInstaller = "$env:TEMP\python-installer.exe"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
-$requirementsFile = "$installDir\\requirements.txt"
-$vbscriptPath = "$installDir\\launcher.vbs"
-$pyScript = "$installDir\\main.py"
+$requirementsFile = "$installDir\requirements.txt"
+$vbscriptPath = "$installDir\launcher.vbs"
+$pyScript = "$installDir\main.py"
 
 function Download-File {
     param ($url, $destination)
@@ -28,12 +28,12 @@ Write-Host "Downloading Python..."
 Download-File -url $pythonInstallerUrl -destination $pythonInstaller
 
 Write-Host "Installing Python..."
-Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 TargetDir=\"C:\\Program Files\\Python312\"" -Wait
+Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 TargetDir=\"C:\Program Files\Python312\"" -Wait
 Remove-Item $pythonInstaller -Force
 
 # Prepare for Python lookup
-$env:Path += ";C:\\Program Files\\Python312\\Scripts;C:\\Program Files\\Python312\\"
-$env:Path += ";$env:LOCALAPPDATA\\Programs\\Python\\Python312\\Scripts;$env:LOCALAPPDATA\\Programs\\Python\\Python312\\"
+$env:Path += ";C:\Program Files\Python312\Scripts;C:\Program Files\Python312\"
+$env:Path += ";$env:LOCALAPPDATA\Programs\Python\Python312\Scripts;$env:LOCALAPPDATA\Programs\Python\Python312\"
 
 $pythonExe = $null
 $pythonCmd = Get-Command python.exe -ErrorAction SilentlyContinue
@@ -43,9 +43,9 @@ if ($pythonCmd) {
 
 if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
     $fallbacks = @( 
-        "$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe",
-        "$env:ProgramFiles\\Python312\\python.exe",
-        "C:\\Python312\\python.exe"
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "$env:ProgramFiles\Python312\python.exe",
+        "C:\Python312\python.exe"
     )
     foreach ($path in $fallbacks) {
         if (Test-Path $path) {
@@ -74,9 +74,9 @@ Write-Host "Installing dependencies..."
 
 Write-Host "Creating startup shortcut..."
 $WshShell = New-Object -ComObject WScript.Shell
-$shortcut = $WshShell.CreateShortcut("$startupFolder\\$shortcutName")
+$shortcut = $WshShell.CreateShortcut("$startupFolder\$shortcutName")
 $shortcut.TargetPath = "wscript.exe"
-$shortcut.Arguments = "`\"$vbscriptPath`\""
+$shortcut.Arguments = "`"$vbscriptPath`""
 $shortcut.WorkingDirectory = $installDir
 $shortcut.IconLocation = "$installDir\icon.ico"
 $shortcut.Save()
