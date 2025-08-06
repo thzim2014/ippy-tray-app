@@ -34,7 +34,7 @@ import traceback
 import webbrowser
 
 # --- Constants ---
-APP_DIR = r"C:\\Tools\\TrayApp"
+APP_DIR = r"C:\Tools\TrayApp"
 LOG_DIR = os.path.join(APP_DIR, "logs")
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
 CONFIG_PATH = os.path.join(ASSETS_DIR, "config.ini")
@@ -106,7 +106,9 @@ def log_ip(ip, changed, manual=False):
 
 def log_error(err):
     with open(ERROR_LOG_FILE, 'a') as f:
-        f.write(f"[{datetime.datetime.now()}] {str(err)}\n{traceback.format_exc()}\n")
+        f.write(f"[{datetime.datetime.now()}] {str(err)}
+{traceback.format_exc()}
+")
 
 # --- Toast Notification ---
 toaster = ToastNotifier()
@@ -129,88 +131,22 @@ def update_icon():
             icon.title = f"IP: {current_ip or 'Unknown'}"
         except Exception as e:
             log_error(e)
-# --- Floating Window ---
-class FloatingWindow(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.overrideredirect(True)
-        self.attributes("-topmost", True)
-        self.geometry(f"+{config.get('Settings', 'window_x', fallback='10')}+{config.get('Settings', 'window_y', fallback='900')}")
-        self.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
-        self.configure(bg="black")
 
-        self.label = tk.Label(self, text="...", font=("Arial", 14), fg="white", bg="black")
-        self.label.pack(padx=5, pady=2)
-
-        self.make_draggable(self.label)
-        self.protocol("WM_DELETE_WINDOW", self.withdraw)
-
-    def make_draggable(self, widget):
-        widget.bind("<ButtonPress-1>", self.start_move)
-        widget.bind("<B1-Motion>", self.do_move)
-
-    def start_move(self, event):
-        self._x = event.x
-        self._y = event.y
-
-    def do_move(self, event):
-        x = self.winfo_x() + event.x - self._x
-        y = self.winfo_y() + event.y - self._y
-        self.geometry(f"+{x}+{y}")
-        config['Settings']['window_x'] = str(x)
-        config['Settings']['window_y'] = str(y)
-        config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
-        save_config()
-
-# --- Float Window & Recheck Logic ---
-def update_float_window(ip, color):
+# --- Floating Window Fix ---
+def update_float_window(ip, _):
     global notified
     if float_window:
         float_window.label.config(text=ip)
-        float_window.label.config(bg=color)
-        if color == "red":
+        target_ip = config.get('Settings', 'target_ip', fallback='0.0.0.0')
+        correct = ip == target_ip
+        display_color = 'green' if correct else 'red'
+        float_window.label.config(bg=display_color)
+        if not correct:
             float_window.attributes("-alpha", 1.0)
             notified = True
         elif notified:
             float_window.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
             notified = False
-
-def recheck_ip():
-    global last_manual_check, current_ip
-    now = time.time()
-    if now - last_manual_check >= 2:
-        last_manual_check = now
-        new_ip = get_ip()
-        if new_ip:
-            changed = new_ip != current_ip
-            if changed:
-                notify_change(current_ip, new_ip)
-            current_ip = new_ip
-            update_float_window(new_ip, "green" if not changed else "red")
-            update_icon()
-            log_ip(new_ip, changed, manual=True)
-
-# --- IP Monitor ---
-def monitor_ip():
-    global current_ip
-    while True:
-        try:
-            new_ip = get_ip()
-            if new_ip:
-                changed = new_ip != current_ip
-                if changed:
-                    if current_ip:
-                        notify_change(current_ip, new_ip)
-                    current_ip = new_ip
-                update_float_window(new_ip, "green" if not changed else "red")
-                update_icon()
-                log_ip(new_ip, changed, manual=False)
-        except Exception as e:
-            log_error(e)
-
-        interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
-        time.sleep(60 / interval)
-
 # --- Tray icon, Settings GUI (Logs tab w/ search, filter, sort, export), Update tab, and main loop ---
 # --- Floating Window ---
 class FloatingWindow(tk.Tk):
@@ -245,18 +181,6 @@ class FloatingWindow(tk.Tk):
         config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
         save_config()
 
-# --- Float Window & Recheck Logic ---
-def update_float_window(ip, color):
-    global notified
-    if float_window:
-        float_window.label.config(text=ip)
-        float_window.label.config(bg=color)
-        if color == "red":
-            float_window.attributes("-alpha", 1.0)
-            notified = True
-        elif notified:
-            float_window.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
-            notified = False
 
 def recheck_ip():
     global last_manual_check, current_ip
