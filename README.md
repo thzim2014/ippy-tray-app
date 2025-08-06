@@ -36,22 +36,6 @@ powershell -ExecutionPolicy Bypass -Command "irm 'https://raw.githubusercontent.
 
 ---
 
-## 🖼 Screenshots
-
-### Floating IP Window
-![Float Window](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/floatwindow.png)
-
-### Settings Tabs
-![Settings Main](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/settings_main.png)
-![Settings Logs](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/settings_logs.png)
-![Settings Update](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/settings_update.png)
-
-### Tray Menu & Notifications
-![Tray Icon](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/tray_icon.png)
-![Toast Notification](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/toast.png)
-
----
-
 ## 📂 App Structure
 
 ```
@@ -111,6 +95,19 @@ window_y = 900
 Remove-Item -Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\TrayApp.lnk"
 Remove-Item -Recurse -Force "C:\Tools\TrayApp"
 ```
+---
+## 🖼 Screenshots
+
+### Tray Menu & Notifications
+![Tray Icon](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/Settings_Tray_Icon.png)
+![Toast Notification](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/Settings_Notification.png)
+
+### Settings Tabs
+![Settings Main](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/Settings_Main.png)
+![Settings Logs](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/Settings_Logs.png)
+![Settings Update](https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/assets/Settings_Update.png)
+
+---
 
 ---
 
