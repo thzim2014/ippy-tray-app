@@ -1,137 +1,134 @@
-Set-StrictMode -Version Latest
+import os
+import sys
+import subprocess
+import threading
+import time
+import configparser
+import socket
+from datetime import datetime
+from pystray import Icon, Menu, MenuItem
+from PIL import Image
+from win10toast import ToastNotifier
+from settings_ui import show_settings_window
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main"
-$appDir = "C:\\Tools\\TrayApp"
-$startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-$shortcutName = "TrayApp.lnk"
-$pythonInstaller = "$env:TEMP\\python-installer.exe"
-$pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
-$getPipUrl = "https://bootstrap.pypa.io/get-pip.py"
-$getPipScript = "$env:TEMP\\get-pip.py"
-$requirementsFile = "$appDir\\requirements.txt"
-$vbscriptPath = "$appDir\\launcher.vbs"
-$pyScript = "$appDir\\main.py"
-$settingsUI = "$appDir\\settings_ui.py"
-$configFile = "$appDir\\config.ini"
-$versionFile = "$appDir\\assets\\version.txt"
-$iconFile = "$appDir\\assets\\tray_app_icon.ico"
-
-function Download-File {
-    param (
-        [string]$url,
-        [string]$destination
-    )
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing -ErrorAction Stop
-    } catch {
-        Write-Error "Failed to download $url"
-        exit 1
-    }
-}
-
-function Ensure-Folder {
-    param ([string]$path)
-    if (-not (Test-Path $path)) {
-        New-Item -ItemType Directory -Path $path | Out-Null
-    }
-}
-
-Ensure-Folder $appDir
-Ensure-Folder "$appDir\\assets"
-Ensure-Folder "$appDir\\logs"
-
-Write-Host "Downloading Python..."
-Download-File -url $pythonInstallerUrl -destination $pythonInstaller
-
-Write-Host "Installing Python..."
-Start-Process -FilePath $pythonInstaller -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'TargetDir="C:\\Program Files\\Python312"' -Wait
-Remove-Item $pythonInstaller -Force
-
-# Prepare path
-$env:Path += ";C:\\Program Files\\Python312\\Scripts;C:\\Program Files\\Python312\\"
-$env:Path += ";$env:LOCALAPPDATA\\Programs\\Python\\Python312\\Scripts;$env:LOCALAPPDATA\\Programs\\Python\\Python312\\"
-
-# Locate Python
-$pythonExe = $null
-$pythonCmd = Get-Command python.exe -ErrorAction SilentlyContinue
-if ($pythonCmd) {
-    $pythonExe = $pythonCmd.Source
-}
-
-if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
-    $fallbacks = @( 
-        "$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe",
-        "$env:ProgramFiles\\Python312\\python.exe",
-        "C:\\Python312\\python.exe"
-    )
-    foreach ($path in $fallbacks) {
-        if (Test-Path $path) {
-            $pythonExe = $path
-            break
+# --- Ensure Dependencies ---
+def ensure_dependencies():
+    try:
+        import pkg_resources
+        required = {
+            'requests', 'pystray', 'Pillow', 'win10toast', 'setuptools',
+            'tk', 'tkcalendar'  # new GUI-related deps for log filtering
         }
+        installed = {pkg.key for pkg in pkg_resources.working_set}
+        missing = required - installed
+        if missing:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])
+    except Exception as e:
+        print(f"Dependency installation failed: {e}")
+        sys.exit(1)
+
+ensure_dependencies()
+
+# --- Paths ---
+BASE_DIR = os.path.dirname(__file__)
+CONFIG_PATH = os.path.join(BASE_DIR, 'assets', 'config.ini')
+LOG_FILE = os.path.join(BASE_DIR, 'logs', 'ipchanges.log')
+ERROR_LOG = os.path.join(BASE_DIR, 'logs', 'error.log')
+ICON_PATH = os.path.join(BASE_DIR, 'assets', 'tray_app_icon.ico')
+
+# --- Ensure Logs Directory ---
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+# --- Load or Prompt Config ---
+if not os.path.exists(CONFIG_PATH):
+    show_settings_window()
+
+config = configparser.ConfigParser()
+config.read(CONFIG_PATH)
+
+# --- Config Getters with Defaults ---
+def get_config():
+    return {
+        'target_ip': config.get('Settings', 'target_ip', fallback='127.0.0.1'),
+        'check_interval': config.getint('Settings', 'check_interval', fallback=60),
+        'notify_on_change': config.getboolean('Settings', 'notify_on_change', fallback=True),
+        'enable_logging': config.getboolean('Settings', 'enable_logging', fallback=True),
+        'always_on_screen': config.getboolean('Settings', 'always_on_screen', fallback=False),
+        'window_alpha': config.getfloat('Settings', 'window_alpha', fallback=0.9),
+        'window_x': config.getint('Settings', 'window_x', fallback=100),
+        'window_y': config.getint('Settings', 'window_y', fallback=100)
     }
-}
 
-if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
-    Write-Error "Python installation failed or python.exe not found."
-    exit 1
-}
+settings = get_config()
+current_ip = None
+toaster = ToastNotifier()
 
-# Install pip if missing
-$pipCheck = & $pythonExe -m pip --version 2>$null
-if ($LASTEXITCODE -ne 0 -or $pipCheck -match "No module named") {
-    Write-Host "Installing pip manually..."
-    Download-File -url $getPipUrl -destination $getPipScript
-    & $pythonExe $getPipScript
-    & $pythonExe -m ensurepip
-    & $pythonExe -m pip install --upgrade pip setuptools wheel
-    Remove-Item $getPipScript -Force
-}
+# --- Logging ---
+def log_change(message):
+    if settings['enable_logging']:
+        with open(LOG_FILE, 'a') as f:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{timestamp}] {message}\n")
 
-# Validate pkg_resources
-try {
-    & $pythonExe -c "import pkg_resources; print('OK')"
-} catch {
-    Write-Warning "pkg_resources is not available. Installing setuptools again."
-    & $pythonExe -m pip install setuptools
-}
+def log_error(message):
+    with open(ERROR_LOG, 'a') as f:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"[{timestamp}] ERROR: {message}\n")
 
-Write-Host "Downloading app files..."
-$files = @("main.py", "requirements.txt", "launcher.vbs", "config.ini", "TrayApp/settings_ui.py")
-foreach ($file in $files) {
-    $filename = Split-Path $file -Leaf
-    $url = "$repoRoot/TrayApp/$filename"
-    $target = Join-Path $appDir $filename
-    Download-File -url $url -destination $target
-}
+# --- IP Check Logic ---
+def get_ip():
+    try:
+        return socket.gethostbyname(settings['target_ip'])
+    except Exception as e:
+        log_error(f"Failed to resolve IP: {e}")
+        return None
 
-Download-File -url "$repoRoot/assets/tray_app_icon.ico" -destination $iconFile
-Download-File -url "$repoRoot/assets/version.txt" -destination $versionFile
+def monitor_ip():
+    global current_ip
+    while True:
+        new_ip = get_ip()
+        if new_ip != current_ip:
+            if current_ip is not None:
+                change_msg = f"IP changed: {current_ip} -> {new_ip}"
+                log_change(change_msg)
+                if settings['notify_on_change']:
+                    toaster.show_toast("IP Monitor", change_msg, icon_path=ICON_PATH, duration=5, threaded=True)
+            current_ip = new_ip
+        else:
+            log_change("IP unchanged")
+        time.sleep(settings['check_interval'])
 
-Write-Host "Fixing malformed requirements.txt if needed..."
-if (Test-Path $requirementsFile) {
-    $content = Get-Content $requirementsFile -Raw
-    if ($content -notmatch "[\r\n]" -and $content -match "[a-zA-Z]+") {
-        $split = ($content -replace '(\w)(?=\w)', '$1 ') -split ' '
-        $cleaned = ($split | Where-Object { $_ -match '^\w+$' }) -join "`n"
-        Set-Content -Path $requirementsFile -Value $cleaned -Encoding UTF8
-    }
-}
+# --- Tray Setup ---
+def on_settings():
+    show_settings_window()
 
-Write-Host "Installing dependencies..."
-& $pythonExe -m pip install --upgrade pip setuptools wheel
-& $pythonExe -m pip install -r $requirementsFile
+def on_exit(icon, item):
+    icon.stop()
 
-Write-Host "Creating startup shortcut..."
-$WshShell = New-Object -ComObject WScript.Shell
-$shortcut = $WshShell.CreateShortcut("$startupFolder\\$shortcutName")
-$shortcut.TargetPath = "wscript.exe"
-$shortcut.Arguments = '"' + $vbscriptPath + '"'
-$shortcut.WorkingDirectory = $appDir
-$shortcut.IconLocation = $iconFile
-$shortcut.Save()
+def on_recheck():
+    global current_ip
+    new_ip = get_ip()
+    if new_ip != current_ip:
+        change_msg = f"IP rechecked: {current_ip} -> {new_ip}"
+        log_change(change_msg)
+        toaster.show_toast("IP Monitor", change_msg, icon_path=ICON_PATH, duration=5, threaded=True)
+        current_ip = new_ip
+    else:
+        log_change("Manual recheck: IP unchanged")
 
-Write-Host "Install complete. App will run on next login."
-exit 0
+tray_menu = Menu(
+    MenuItem("Recheck IP", lambda: on_recheck()),
+    MenuItem("Settings", lambda: on_settings()),
+    MenuItem("Exit", on_exit)
+)
+
+icon_image = Image.open(ICON_PATH)
+tray_icon = Icon("TrayApp", icon=icon_image, menu=tray_menu)
+
+# --- Main ---
+def main():
+    threading.Thread(target=monitor_ip, daemon=True).start()
+    tray_icon.run()
+
+if __name__ == '__main__':
+    main()
