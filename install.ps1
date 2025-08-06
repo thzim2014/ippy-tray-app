@@ -40,7 +40,7 @@ Write-Host "Downloading Python..."
 Download-File -url $pythonInstallerUrl -destination $pythonInstaller
 
 Write-Host "Installing Python..."
-Start-Process -FilePath "$pythonInstaller" -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'TargetDir="C:\\Program Files\\Python312"' -Wait
+Start-Process -FilePath $pythonInstaller -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'TargetDir="C:\\Program Files\\Python312"' -Wait
 Remove-Item $pythonInstaller -Force
 
 # Prepare path
@@ -73,13 +73,12 @@ if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
     exit 1
 }
 
-# Install pip if pkg_resources is missing
-try {
-    & $pythonExe -c "import pkg_resources" 2>$null
-} catch {
+# Install pip if missing
+$pipCheck = & $pythonExe -m pip --version 2>$null
+if ($LASTEXITCODE -ne 0 -or $pipCheck -match "No module named") {
     Write-Host "Installing pip manually..."
     Download-File -url $getPipUrl -destination $getPipScript
-    Start-Process -FilePath $pythonExe -ArgumentList "`"$getPipScript`"" -Wait
+    & $pythonExe $getPipScript
     & $pythonExe -m ensurepip
     & $pythonExe -m pip install --upgrade pip setuptools wheel
     Remove-Item $getPipScript -Force
