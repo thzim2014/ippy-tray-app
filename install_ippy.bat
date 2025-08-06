@@ -16,35 +16,36 @@ mkdir "%PYTHON_DIR%" >nul 2>&1
 :: Download embedded Python if not already present
 if not exist "%PYTHON_DIR%\python.exe" (
     echo [*] Downloading embedded Python...
-    powershell -Command "Invoke-WebRequest -Uri %PYTHON_URL% -OutFile python_embed.zip"
-    powershell -Command "Expand-Archive -Path python_embed.zip -DestinationPath '%PYTHON_DIR%'"
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%PYTHON_URL%' -OutFile 'python_embed.zip'"
+    powershell -Command "Expand-Archive -Path 'python_embed.zip' -DestinationPath '%PYTHON_DIR%' -Force"
     del python_embed.zip
 )
 
 :: Ensure pip is available
 if not exist "%PYTHON_DIR%\Scripts\pip.exe" (
     echo [*] Installing pip...
-    powershell -Command "Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py"
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile 'get-pip.py'"
     "%PYTHON_DIR%\python.exe" get-pip.py
     del get-pip.py
 )
 
-:: Upgrade pip/setuptools
+:: Upgrade pip and setuptools
 "%PYTHON_DIR%\Scripts\pip.exe" install --upgrade pip setuptools
 
 :: Install dependencies
-"%PYTHON_DIR%\Scripts\pip.exe" install requests pystray Pillow win10toast
+"%PYTHON_DIR%\Scripts\pip.exe" install requests pillow win10toast
 
 :: Create VBScript launcher (no console window)
 (
-echo Set WshShell = CreateObject("WScript.Shell"^)
-echo WshShell.Run """%PYTHON_DIR%\python.exe"" ""%SCRIPT_PATH%""", 0, False
+echo Set WshShell = CreateObject("WScript.Shell") 
+echo WshShell.Run """"^& "%PYTHON_DIR%\python.exe" ^& """ """^& "%SCRIPT_PATH%" ^& """", 0, False
 ) > "%VBS_LAUNCHER%"
 
-:: Create shortcut in Startup
+:: Create shortcut in Startup folder
 powershell -Command ^
-  "$s=(New-Object -COM WScript.Shell).CreateShortcut('%SHORTCUT_PATH%');" ^
-  "$s.TargetPath='%VBS_LAUNCHER%';$s.Save()"
+  "$s=(New-Object -COM WScript.Shell).CreateShortcut('%SHORTCUT_PATH%'); ^
+    $s.TargetPath='%VBS_LAUNCHER%'; ^
+    $s.Save()"
 
 echo [*] Shortcut created in Startup to run iPPY silently.
 pause
