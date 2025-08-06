@@ -8,42 +8,46 @@ Write-Host "`n[*] Installing Python silently..."
 Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_tcltk=1" -Wait
 
 # Locate installed python.exe
-$possiblePython = Get-ChildItem -Path "$env:LocalAppData\Programs\Python" -Recurse -Filter python.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
-if (-not $possiblePython) {
-    Write-Host "❌ Failed to find Python.exe. Aborting."
+$pythonExe = Get-ChildItem -Path "$env:LocalAppData\Programs\Python" -Recurse -Filter python.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
+if (-not $pythonExe) {
+    Write-Host "❌ Failed to find python.exe. Aborting."
     exit 1
 }
 
-$pythonExe = $possiblePython
-$pythonDir = Split-Path $pythonExe
-$pipExe = Join-Path $pythonDir "Scripts\pip.exe"
+$pipExe = Join-Path (Split-Path $pythonExe) "Scripts\pip.exe"
 
 Write-Host "`n[*] Installing dependencies..."
-& $pipExe install --no-warn-script-location requests pillow pystray win10toast
+& $pipExe install --no-warn-script-location requests pillow pystray win10toast charset-normalizer idna urllib3 six pywin32
 
-# Fetch app files from GitHub
-Write-Host "`n[*] Downloading app files from GitHub..."
-$appFolder = "C:\Tools\iPPY"
+# Download app files from GitHub
+Write-Host "`n[*] Downloading app source..."
 $zipUrl = "https://github.com/GoblinRules/ippy-tray-app/archive/refs/heads/main.zip"
-$zipPath = "$env:TEMP\iPPY.zip"
-Expand-Archive -Force -Path $zipPath -DestinationPath $env:TEMP -ErrorAction SilentlyContinue
-Remove-Item -Force $appFolder -Recurse -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $appFolder | Out-Null
+$zipPath = "$env:TEMP\ippy.zip"
+$appFolder = "C:\Tools\iPPY"
+$tempExtract = "$env:TEMP\ippy-extract"
+
+# Clean up any previous failed attempts
+Remove-Item -Force -Recurse $appFolder -ErrorAction SilentlyContinue
+Remove-Item -Force -Recurse $tempExtract -ErrorAction SilentlyContinue
+
 bitsadmin /transfer "ippyZip" /priority normal "$zipUrl" "$zipPath"
-Expand-Archive -Path $zipPath -DestinationPath $env:TEMP -Force
-Copy-Item "$env:TEMP\ippy-tray-app-main\*" -Destination $appFolder -Recurse -Force
+Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
+Copy-Item "$tempExtract\ippy-tray-app-main\*" -Destination $appFolder -Recurse -Force
 
 # Create VBScript launcher
+Write-Host "`n[*] Creating VBS launcher..."
 $launcherVbs = "$appFolder\launch_silent.vbs"
-Set-Content -Path $launcherVbs -Value (
-    'Set WshShell = CreateObject("WScript.Shell")' + "`n" +
-    "WshShell.Run `"$pythonExe`" `"$appFolder\iPPY.py`", 0, False"
-)
+$launcherContent = @"
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run """$pythonExe"" ""$appFolder\iPPY.py""", 0, False
+"@
+Set-Content -Path $launcherVbs -Value $launcherContent -Encoding ASCII
 
-# Create shortcut in Startup
+# Create shortcut in Startup folder
+Write-Host "`n[*] Creating Startup shortcut..."
 $shortcutPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.lnk"
-$wsh = New-Object -ComObject WScript.Shell
-$shortcut = $wsh.CreateShortcut($shortcutPath)
+$WshShell = New-Object -ComObject WScript.Shell
+$shortcut = $WshShell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $launcherVbs
 $shortcut.Save()
 
