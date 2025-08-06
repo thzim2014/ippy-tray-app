@@ -69,4 +69,6 @@ $shortcut.TargetPath = $vbsPath
 $shortcut.WorkingDirectory = $appFolder
 $shortcut.Save()
 
-Write-Host "`n✓ Setup complete. iPPY will run silently at login."
+Write-Host "`n[✓] Setup complete. iPPY will run silently at login."
+
+
