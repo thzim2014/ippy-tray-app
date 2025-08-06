@@ -1,27 +1,12 @@
-import os
-import sys
+# Install missing dependencies
 import subprocess
-import threading
-import time
-import configparser
-import socket
-from datetime import datetime
-from pystray import Icon, Menu, MenuItem
-from PIL import Image
-from win10toast import ToastNotifier
-import tkinter as tk
-from tkinter import ttk, messagebox
-from tkcalendar import DateEntry
-import requests
+import sys
 
-# --- Ensure Dependencies ---
+
 def ensure_dependencies():
     try:
         import pkg_resources
-        required = {
-            'requests', 'pystray', 'Pillow', 'win10toast', 'setuptools',
-            'tk', 'tkcalendar'
-        }
+        required = {'tk','requests', 'pystray', 'Pillow', 'win10toast', 'setuptools'}
         installed = {pkg.key for pkg in pkg_resources.working_set}
         missing = required - installed
         if missing:
@@ -30,166 +15,260 @@ def ensure_dependencies():
         print(f"Dependency installation failed: {e}")
         sys.exit(1)
 
+
 ensure_dependencies()
 
-# --- Paths ---
-BASE_DIR = os.path.dirname(__file__)
-CONFIG_PATH = os.path.join(BASE_DIR, 'assets', 'config.ini')
-LOG_FILE = os.path.join(BASE_DIR, 'logs', 'ipchanges.log')
-ERROR_LOG = os.path.join(BASE_DIR, 'logs', 'error.log')
-ICON_PATH = os.path.join(BASE_DIR, 'assets', 'tray_app_icon.ico')
-VERSION_FILE = os.path.join(BASE_DIR, 'assets', 'version.txt')
-REMOTE_VERSION_URL = 'https://raw.githubusercontent.com/your/repo/main/assets/version.txt'
-REMOTE_MAIN_URL = 'https://raw.githubusercontent.com/your/repo/main/main.py'
+# Now imports
+import os
+import time
+import threading
+import requests
+import datetime
+import tkinter as tk
+from tkinter import ttk, messagebox
+import pystray
+from PIL import Image, ImageDraw
+import configparser
+from win10toast import ToastNotifier
 
-# --- Ensure Logs Directory ---
-os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+# Toast notification
+toaster = ToastNotifier()
 
-# --- Load or Prompt Config ---
+# Constants
+APP_DIR = r"C:\\Tools\\TrayApp"
+LOG_DIR = os.path.join(APP_DIR, "logs")
+CONFIG_PATH = os.path.join(APP_DIR, "config.ini")
+IP_API_URL = "http://ip-api.com/json/"
+DEFAULT_IP = "0.0.0.0"
+
+# Ensure folders exist
+os.makedirs(APP_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Global state
+current_ip = None
+icon = None
+float_window = None
 config = configparser.ConfigParser()
-if not os.path.exists(CONFIG_PATH):
-    config['Settings'] = {
-        'target_ip': '127.0.0.1',
-        'check_interval': '60',
+notified = False
+last_manual_check = 0
+
+# Default config
+default_config = {
+    'Settings': {
+        'target_ip': DEFAULT_IP,
+        'check_interval': '1',
         'notify_on_change': 'yes',
         'enable_logging': 'yes',
         'always_on_screen': 'no',
-        'window_alpha': '0.9',
-        'window_x': '100',
-        'window_y': '100'
+        'window_alpha': '0.85',
+        'window_x': '10',
+        'window_y': '900'
     }
-    with open(CONFIG_PATH, 'w') as f:
-        config.write(f)
-config.read(CONFIG_PATH)
+}
+
+
+first_run = False
+
+def load_config():
+    global first_run
+    if not os.path.exists(CONFIG_PATH):
+        config.read_dict(default_config)
+        save_config()
+        first_run = True
+    else:
+        config.read(CONFIG_PATH)
+
 
 def save_config():
     with open(CONFIG_PATH, 'w') as f:
         config.write(f)
 
-settings = {
-    'target_ip': config.get('Settings', 'target_ip', fallback='127.0.0.1'),
-    'check_interval': config.getint('Settings', 'check_interval', fallback=60),
-    'notify_on_change': config.getboolean('Settings', 'notify_on_change', fallback=True),
-    'enable_logging': config.getboolean('Settings', 'enable_logging', fallback=True),
-    'always_on_screen': config.getboolean('Settings', 'always_on_screen', fallback=False),
-    'window_alpha': config.getfloat('Settings', 'window_alpha', fallback=0.9),
-    'window_x': config.getint('Settings', 'window_x', fallback=100),
-    'window_y': config.getint('Settings', 'window_y', fallback=100)
-}
 
-current_ip = None
-main_window = None
-window_open = False
-tray_icon = None
-toaster = ToastNotifier()
-last_logged_hour = -1
-
-# --- Logging ---
-def log_change(message):
-    if settings['enable_logging']:
-        with open(LOG_FILE, 'a') as f:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{timestamp}] {message}\n")
-
-def log_error(message):
-    with open(ERROR_LOG, 'a') as f:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"[{timestamp}] ERROR: {message}\n")
-
-# --- IP Check Logic ---
 def get_ip():
     try:
-        return socket.gethostbyname(settings['target_ip'])
-    except Exception as e:
-        log_error(f"Failed to resolve IP: {e}")
+        res = requests.get(IP_API_URL, timeout=5)
+        return res.json()['query']
+    except Exception:
         return None
 
+
+def log_ip(ip, changed):
+    if config.getboolean('Settings', 'enable_logging', fallback=True):
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_file = os.path.join(LOG_DIR, f"{datetime.date.today()}.log")
+        with open(log_file, 'a') as f:
+            f.write(f"[{now}] {ip} {'CHANGE' if changed else ''}\n")
+
+
+def notify_change(old_ip, new_ip):
+    if config.getboolean('Settings', 'notify_on_change', fallback=True):
+        try:
+            toaster.show_toast("IP Change Detected", f"{old_ip} ➔ {new_ip}", duration=5, threaded=True)
+        except Exception as e:
+            print("Toast error:", e)
+
+
+def draw_icon(color):
+    image = Image.new('RGB', (64, 64), color)
+    dc = ImageDraw.Draw(image)
+    dc.ellipse((16, 16, 48, 48), fill=color)
+    return image
+
+
+def update_float_window(ip, color):
+    global notified
+    if float_window:
+        float_window.label.config(text=ip)
+        float_window.label.config(bg=color)
+        if color == "red":
+            float_window.attributes("-alpha", 1.0)
+            notified = True
+        elif notified:
+            float_window.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
+            notified = False
+
+
+def get_color():
+    target_ip = config['Settings']['target_ip']
+    return "green" if current_ip == target_ip else "red"
+
+
+def update_icon():
+    if icon:
+        icon.icon = draw_icon(get_color())
+        icon.title = f"IP: {current_ip or 'Unknown'}"
+
+
+def toggle_float_window():
+    global float_window
+    if float_window:
+        if float_window.state() == 'withdrawn':
+            float_window.deiconify()
+        else:
+            float_window.withdraw()
+    else:
+        def run_float():
+            global float_window
+            float_window = FloatingWindow()
+            float_window.mainloop()
+        threading.Thread(target=run_float, daemon=True).start()
+
+
+def recheck_ip():
+    global last_manual_check
+    now = time.time()
+    if now - last_manual_check >= 2:  # simple debounce
+        last_manual_check = now
+        new_ip = get_ip()
+        if new_ip:
+            changed = new_ip != current_ip
+            update_float_window(new_ip, get_color())
+            update_icon()
+            log_ip(new_ip, changed)
+
+
 def monitor_ip():
-    global current_ip, last_logged_hour
+    global current_ip
     while True:
         new_ip = get_ip()
-        now = datetime.now()
-        if new_ip != current_ip:
-            if current_ip is not None:
-                change_msg = f"IP changed: {current_ip} -> {new_ip}"
-                log_change(change_msg)
-                if settings['notify_on_change']:
-                    toaster.show_toast("IP Monitor", change_msg, icon_path=ICON_PATH, duration=5, threaded=True)
-            current_ip = new_ip
-        elif now.hour != last_logged_hour:
-            log_change("No change detected in the last hour")
-            last_logged_hour = now.hour
-        time.sleep(settings['check_interval'])
+        if new_ip:
+            changed = new_ip != current_ip
+            if changed:
+                if current_ip:
+                    notify_change(current_ip, new_ip)
+                current_ip = new_ip
+            update_icon()
+            update_float_window(new_ip, get_color())
+            log_ip(new_ip, changed)
 
-# --- Floating Window ---
-def open_window():
-    global main_window, window_open
-    if window_open:
-        return
-    window_open = True
-    main_window = tk.Toplevel()
-    main_window.overrideredirect(True)
-    main_window.attributes('-topmost', settings['always_on_screen'])
-    main_window.attributes('-alpha', settings['window_alpha'])
-    main_window.geometry(f"+{settings['window_x']}+{settings['window_y']}")
-    main_window.configure(bg='black')
+        rate = max(1, min(45, int(config['Settings']['check_interval'])))
+        time.sleep(60 / rate)
 
-    label = tk.Label(main_window, text=f"Current IP: {current_ip or 'Resolving...'}", font=("Segoe UI", 14), fg="white", bg="black")
-    label.pack(padx=10, pady=5)
 
-    def on_close():
-        global window_open
-        window_open = False
-        main_window.withdraw()
-        update_tray_menu()
+def on_exit(icon, item):
+    if float_window:
+        float_window.destroy()
+    icon.stop()
+    os._exit(0)
 
-    def start_move(event):
-        main_window._x = event.x
-        main_window._y = event.y
 
-    def do_move(event):
-        x = main_window.winfo_x() + event.x - main_window._x
-        y = main_window.winfo_y() + event.y - main_window._y
-        main_window.geometry(f"+{x}+{y}")
+def on_settings(icon=None, item=None):
+    def launch_settings():
+        exe = f'"{sys.executable}"' if ' ' in sys.executable else sys.executable
+        script = f'"{__file__}"' if ' ' in __file__ else __file__
+        os.system(f'{exe} {script} --settings')
+    threading.Thread(target=launch_settings).start()
+
+
+def toggle_window(icon=None, item=None):
+    toggle_float_window()
+    if icon:
+        icon.update_menu()
+
+
+def create_tray():
+    global icon
+
+    def get_window_label():
+        if float_window and float_window.state() != 'withdrawn':
+            return "Close App Window"
+        return "Open App Window"
+
+    icon = pystray.Icon("iPPY", draw_icon("grey"), menu=pystray.Menu(
+        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem(lambda item: get_window_label(), toggle_window),
+        pystray.MenuItem("Recheck IP", lambda icon, item: recheck_ip()),
+        pystray.MenuItem("Exit", on_exit)
+    ))
+    icon.run()
+
+
+class FloatingWindow(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.geometry(f"+{config.get('Settings', 'window_x', fallback='10')}+{config.get('Settings', 'window_y', fallback='900')}")
+        self.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
+        self.configure(bg="black")
+
+        self.label = tk.Label(self, text="...", font=("Arial", 14), fg="white", bg="black")
+        self.label.pack(padx=5, pady=2)
+
+        self.make_draggable(self.label)
+        self.protocol("WM_DELETE_WINDOW", self.withdraw)
+
+    def make_draggable(self, widget):
+        widget.bind("<ButtonPress-1>", self.start_move)
+        widget.bind("<B1-Motion>", self.do_move)
+
+    def start_move(self, event):
+        self._x = event.x
+        self._y = event.y
+
+    def do_move(self, event):
+        x = self.winfo_x() + event.x - self._x
+        y = self.winfo_y() + event.y - self._y
+        self.geometry(f"+{x}+{y}")
         config['Settings']['window_x'] = str(x)
         config['Settings']['window_y'] = str(y)
+        config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
         save_config()
 
-    label.bind("<ButtonPress-1>", start_move)
-    label.bind("<B1-Motion>", do_move)
 
-    main_window.protocol("WM_DELETE_WINDOW", on_close)
-    update_tray_menu()
-
-def toggle_window(icon, item):
-    global window_open
-    if window_open:
-        main_window.withdraw()
-        window_open = False
-    else:
-        open_window()
-    update_tray_menu()
-
-# --- Tray Setup ---
-def show_settings_window():
+if '--settings' in sys.argv:
+    load_config()
     settings_win = tk.Tk()
     settings_win.title("iPPY Settings")
-    settings_win.geometry("400x450")
+    settings_win.geometry("300x350")
     settings_win.resizable(False, False)
-    try:
-        settings_win.iconbitmap(ICON_PATH)
-    except: pass
 
     tab_control = ttk.Notebook(settings_win)
     main_tab = ttk.Frame(tab_control)
     window_tab = ttk.Frame(tab_control)
-    logs_tab = ttk.Frame(tab_control)
-    update_tab = ttk.Frame(tab_control)
-
     tab_control.add(main_tab, text='Main')
     tab_control.add(window_tab, text='App Window')
-    tab_control.add(logs_tab, text='Logs')
-    tab_control.add(update_tab, text='Updates')
     tab_control.pack(expand=1, fill="both")
 
     tk.Label(main_tab, text="Target IP:").pack()
@@ -215,64 +294,13 @@ def show_settings_window():
     alpha_slider.set(float(config['Settings'].get('window_alpha', 0.85)))
     alpha_slider.pack(fill="x")
 
-    def check_updates():
-        if not os.path.exists(VERSION_FILE):
-            local_version = "0.0.0"
-        else:
-            with open(VERSION_FILE) as vf:
-                local_version = vf.read().strip()
+    def apply_changes():
+        config['Settings']['window_alpha'] = str(alpha_slider.get())
+        save_config()
+        if float_window:
+            float_window.attributes("-alpha", float(config['Settings']['window_alpha']))
 
-        try:
-            r = requests.get(REMOTE_VERSION_URL, timeout=5)
-            remote_version = r.text.strip()
-        except:
-            messagebox.showerror("Error", "Could not reach update server.")
-            return
-
-        if remote_version != local_version:
-            if messagebox.askyesno("Update Available", f"Update found: {remote_version}\nDownload and apply?"):
-                try:
-                    new_code = requests.get(REMOTE_MAIN_URL, timeout=10).text
-                    with open(__file__, 'w') as mf:
-                        mf.write(new_code)
-                    with open(VERSION_FILE, 'w') as vf:
-                        vf.write(remote_version)
-                    messagebox.showinfo("Updated", "App updated. Please restart.")
-                    settings_win.destroy()
-                except Exception as e:
-                    messagebox.showerror("Error", f"Update failed: {e}")
-        else:
-            messagebox.showinfo("Up-to-date", "You are already on the latest version.")
-
-    tk.Button(update_tab, text="Check for Updates", command=check_updates).pack(pady=20)
-
-    def filter_logs():
-        keyword = change_only_var.get()
-        selected_date = log_date.get_date().strftime('%Y-%m-%d')
-        output_box.delete("1.0", tk.END)
-
-        if not os.path.exists(LOG_FILE):
-            output_box.insert(tk.END, "No logs found.")
-            return
-
-        with open(LOG_FILE, "r") as f:
-            for line in f:
-                if selected_date in line:
-                    if keyword:
-                        if "CHANGE" in line:
-                            output_box.insert(tk.END, line)
-                    else:
-                        output_box.insert(tk.END, line)
-
-    change_only_var = tk.BooleanVar()
-    tk.Checkbutton(logs_tab, text="Only show changes", variable=change_only_var).pack(anchor="w")
-    tk.Label(logs_tab, text="Select Date:").pack()
-    log_date = DateEntry(logs_tab, width=12, background='darkblue', foreground='white', borderwidth=2)
-    log_date.set_date(datetime.today())
-    log_date.pack(pady=5)
-    tk.Button(logs_tab, text="Load Logs", command=filter_logs).pack()
-    output_box = tk.Text(logs_tab, height=10)
-    output_box.pack(fill="both", expand=True, padx=5, pady=5)
+    alpha_slider.config(command=lambda _: apply_changes())
 
     def save():
         config['Settings']['target_ip'] = ip_entry.get().strip()
@@ -285,53 +313,25 @@ def show_settings_window():
         settings_win.destroy()
 
     tk.Button(settings_win, text="Save", command=save).pack(pady=10)
+
+    if first_run:
+        messagebox.showinfo("First Run", "Welcome! Please set a target IP.")
+
     settings_win.mainloop()
+    sys.exit(0)
 
-def on_settings(icon=None, item=None):
-    show_settings_window()
-
-def on_exit(icon, item):
-    if main_window:
-        main_window.destroy()
-    icon.stop()
-
-def on_recheck():
-    global current_ip
-    new_ip = get_ip()
-    if new_ip != current_ip:
-        change_msg = f"IP rechecked: {current_ip} -> {new_ip}"
-        log_change(change_msg)
-        toaster.show_toast("IP Monitor", change_msg, icon_path=ICON_PATH, duration=5, threaded=True)
-        current_ip = new_ip
-    else:
-        log_change("Manual recheck: IP unchanged")
-
-def get_window_toggle_label():
-    return "Close App Window" if window_open else "Open App Window"
-
-def update_tray_menu():
-    global tray_icon
-    tray_icon.menu = Menu(
-        MenuItem(get_window_toggle_label(), toggle_window),
-        MenuItem("Recheck IP", lambda: on_recheck()),
-        MenuItem("Settings", lambda: on_settings()),
-        MenuItem("Exit", on_exit)
-    )
-    tray_icon.title = f"IP: {current_ip or 'Resolving...'}"
-
-def create_tray():
-    global tray_icon
-    icon_image = Image.open(ICON_PATH)
-    tray_icon = Icon("TrayApp", icon=icon_image)
-    update_tray_menu()
-    tray_icon.run()
-
-# --- Main ---
-def main():
-    threading.Thread(target=monitor_ip, daemon=True).start()
-    if settings['always_on_screen']:
-        open_window()
-    create_tray()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    try:
+        load_config()
+        if first_run:
+            on_settings()
+        if config.getboolean('Settings', 'always_on_screen'):
+            toggle_float_window()
+        tray_thread = threading.Thread(target=create_tray, daemon=True)
+        tray_thread.start()
+        monitor_ip()
+    except Exception as e:
+        with open(os.path.join(APP_DIR, "error.log"), "w") as f:
+            f.write(str(e))
+        import traceback
+        print("Fatal error:", traceback.format_exc())
