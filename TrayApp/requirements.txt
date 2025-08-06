@@ -8,3 +8,4 @@ win10toast
 
 pystray
 
+setuptools
