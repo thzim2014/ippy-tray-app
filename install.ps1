@@ -7,7 +7,7 @@ bitsadmin /transfer "ipyppy" /priority normal "$installerUrl" "$installerPath"
 Write-Host "`n[*] Installing Python silently..."
 Start-Process -FilePath $installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_tcltk=1" -Wait
 
-# Locate python.exe manually by scanning typical local install path
+# Locate installed python.exe
 $possiblePython = Get-ChildItem -Path "$env:LocalAppData\Programs\Python" -Recurse -Filter python.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
 if (-not $possiblePython) {
     Write-Host "❌ Failed to find Python.exe. Aborting."
@@ -21,17 +21,26 @@ $pipExe = Join-Path $pythonDir "Scripts\pip.exe"
 Write-Host "`n[*] Installing dependencies..."
 & $pipExe install --no-warn-script-location requests pillow pystray win10toast
 
-# Create folders and launcher
-$trayAppPath = "C:\Tools\iPPY\iPPY.py"
-$launcherVbs = "C:\Tools\iPPY\launch_silent.vbs"
-New-Item -ItemType Directory -Force -Path "C:\Tools\iPPY" | Out-Null
+# Fetch app files from GitHub
+Write-Host "`n[*] Downloading app files from GitHub..."
+$appFolder = "C:\Tools\iPPY"
+$zipUrl = "https://github.com/GoblinRules/ippy-tray-app/archive/refs/heads/main.zip"
+$zipPath = "$env:TEMP\iPPY.zip"
+Expand-Archive -Force -Path $zipPath -DestinationPath $env:TEMP -ErrorAction SilentlyContinue
+Remove-Item -Force $appFolder -Recurse -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $appFolder | Out-Null
+bitsadmin /transfer "ippyZip" /priority normal "$zipUrl" "$zipPath"
+Expand-Archive -Path $zipPath -DestinationPath $env:TEMP -Force
+Copy-Item "$env:TEMP\ippy-tray-app-main\*" -Destination $appFolder -Recurse -Force
 
+# Create VBScript launcher
+$launcherVbs = "$appFolder\launch_silent.vbs"
 Set-Content -Path $launcherVbs -Value (
     'Set WshShell = CreateObject("WScript.Shell")' + "`n" +
-    "WshShell.Run `"$pythonExe`" `"$trayAppPath`", 0, False"
+    "WshShell.Run `"$pythonExe`" `"$appFolder\iPPY.py`", 0, False"
 )
 
-# Add shortcut to Startup folder
+# Create shortcut in Startup
 $shortcutPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\iPPY.lnk"
 $wsh = New-Object -ComObject WScript.Shell
 $shortcut = $wsh.CreateShortcut($shortcutPath)
