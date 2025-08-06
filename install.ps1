@@ -77,7 +77,9 @@ try {
 } catch {
     Write-Host "Installing pip manually..."
     Download-File -url $getPipUrl -destination $getPipScript
-    & $pythonExe $getPipScript
+    Start-Process -FilePath $pythonExe -ArgumentList "`"$getPipScript`"" -Wait
+    & $pythonExe -m ensurepip
+    & $pythonExe -m pip install --upgrade pip setuptools wheel
     Remove-Item $getPipScript -Force
 }
 
