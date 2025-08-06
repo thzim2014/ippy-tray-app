@@ -66,6 +66,7 @@ main_window = None
 window_open = False
 tray_icon = None
 toaster = ToastNotifier()
+last_logged_hour = -1
 
 # --- Logging ---
 def log_change(message):
@@ -88,9 +89,10 @@ def get_ip():
         return None
 
 def monitor_ip():
-    global current_ip
+    global current_ip, last_logged_hour
     while True:
         new_ip = get_ip()
+        now = datetime.now()
         if new_ip != current_ip:
             if current_ip is not None:
                 change_msg = f"IP changed: {current_ip} -> {new_ip}"
@@ -98,8 +100,9 @@ def monitor_ip():
                 if settings['notify_on_change']:
                     toaster.show_toast("IP Monitor", change_msg, icon_path=ICON_PATH, duration=5, threaded=True)
             current_ip = new_ip
-        else:
-            log_change("IP unchanged")
+        elif now.hour != last_logged_hour:
+            log_change("No change detected in the last hour")
+            last_logged_hour = now.hour
         time.sleep(settings['check_interval'])
 
 # --- Window ---
@@ -108,20 +111,21 @@ def open_window():
     if window_open:
         return
     window_open = True
-    main_window = tk.Tk()
+    main_window = tk.Toplevel()
     main_window.overrideredirect(True)
     main_window.attributes('-topmost', settings['always_on_screen'])
     main_window.attributes('-alpha', settings['window_alpha'])
     main_window.geometry(f"+{settings['window_x']}+{settings['window_y']}")
     main_window.configure(bg='black')
 
-    label = tk.Label(main_window, text=f"Current IP: {current_ip}", font=("Segoe UI", 14), fg="white", bg="black")
+    label = tk.Label(main_window, text=f"Current IP: {current_ip or 'Resolving...'}", font=("Segoe UI", 14), fg="white", bg="black")
     label.pack(padx=10, pady=5)
 
     def on_close():
         global window_open
         window_open = False
         main_window.withdraw()
+        update_tray_menu()
 
     def start_move(event):
         main_window._x = event.x
@@ -140,17 +144,16 @@ def open_window():
     label.bind("<B1-Motion>", do_move)
 
     main_window.protocol("WM_DELETE_WINDOW", on_close)
-    threading.Thread(target=main_window.mainloop, daemon=True).start()
+    update_tray_menu()
 
 def toggle_window(icon, item):
     global window_open
     if window_open:
         main_window.withdraw()
         window_open = False
-        tray_icon.menu.items[0].text = "Open App Window"
     else:
         open_window()
-        tray_icon.menu.items[0].text = "Close App Window"
+    update_tray_menu()
 
 # --- Tray Setup ---
 def on_settings(icon=None, item=None):
@@ -172,15 +175,25 @@ def on_recheck():
     else:
         log_change("Manual recheck: IP unchanged")
 
-def create_tray():
+def get_window_toggle_label():
+    return "Close App Window" if window_open else "Open App Window"
+
+def update_tray_menu():
     global tray_icon
-    icon_image = Image.open(ICON_PATH)
-    tray_icon = Icon("TrayApp", icon=icon_image, menu=Menu(
-        MenuItem("Close App Window" if settings['always_on_screen'] else "Open App Window", toggle_window),
+    tray_icon.menu = Menu(
+        MenuItem(get_window_toggle_label(), toggle_window),
         MenuItem("Recheck IP", lambda: on_recheck()),
         MenuItem("Settings", lambda: on_settings()),
         MenuItem("Exit", on_exit)
-    ))
+    )
+    tray_icon.title = f"IP: {current_ip or 'Resolving...'}"
+
+
+def create_tray():
+    global tray_icon
+    icon_image = Image.open(ICON_PATH)
+    tray_icon = Icon("TrayApp", icon=icon_image)
+    update_tray_menu()
     tray_icon.run()
 
 # --- Main ---
