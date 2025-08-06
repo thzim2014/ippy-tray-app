@@ -1,7 +1,0 @@
-tk
-tkcalendar
-requests
-pillow
-win10toast
-pystray
-setuptools
