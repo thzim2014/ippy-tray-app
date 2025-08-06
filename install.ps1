@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/"
+$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main/TrayApp"
 $installDir = "C:\Tools\TrayApp"
 $startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $shortcutName = "TrayApp.lnk"
@@ -82,7 +82,7 @@ Write-Host "Creating startup shortcut..."
 $WshShell = New-Object -ComObject WScript.Shell
 $shortcut = $WshShell.CreateShortcut("$startupFolder\$shortcutName")
 $shortcut.TargetPath = "wscript.exe"
-$shortcut.Arguments = '\"' + $vbscriptPath + '\"'
+$shortcut.Arguments = "`"$vbscriptPath`""
 $shortcut.WorkingDirectory = $installDir
 $shortcut.IconLocation = "$installDir\icon.ico"
 $shortcut.Save()
