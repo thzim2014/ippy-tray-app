@@ -60,19 +60,19 @@ DEFAULT_IP = "0.0.0.0"
 # -----------------------
 # Global State
 # -----------------------
-current_ip = None
-icon = None
-float_window = None
-config = configparser.ConfigParser()
-notified = False
-last_manual_check = 0
-first_run = False
+#current_ip = None
+#icon = None
+#float_window = None
+#config = configparser.ConfigParser()
+#notified = False
+#last_manual_check = 0
+#first_run = False
 
 # Runtime settings cached from config.ini
-target_ip = DEFAULT_IP
-notify_on_change = True
-enable_logging = True
-always_on_screen = False
+#target_ip = DEFAULT_IP
+#notify_on_change = True
+#enable_logging = True
+#always_on_screen = False
 
 # Event used to wake monitor thread when settings change
 monitor_event = threading.Event()
