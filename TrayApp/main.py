@@ -214,7 +214,9 @@ def update_float_window(ip, _):
         float_window.label.config(text=ip)
         correct = ip == target_ip
         display_color = 'green' if correct else 'red'
-        float_window.label.config(bg=display_color)
+        fg_color = 'black' if correct else 'white'
+        float_window.configure(bg=display_color)
+        float_window.label.config(bg=display_color, fg=fg_color)
         if not correct:
             float_window.attributes("-alpha", 1.0)
             notified = True
