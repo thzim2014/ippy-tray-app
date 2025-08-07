@@ -65,6 +65,10 @@ settings_window = None
 monitor_event = threading.Event()
 root = None
 
+# track manual recheck cooldown and overlay state
+last_manual_check = 0
+overlay_is_visible = False
+
 target_ip = DEFAULT_IP
 notify_on_change = True
 enable_logging = True
@@ -198,13 +202,20 @@ def gui_update_overlay(ip): gui_queue.put((overlay_update, (ip,)))
 def gui_update_icon(): gui_queue.put((update_icon, ()))
 
 def toggle_overlay():
-    global float_window
+    global float_window, overlay_is_visible
     if float_window and float_window.winfo_exists():
-        float_window.withdraw() if float_window.state() != 'withdrawn' else float_window.deiconify()
+        if float_window.state() != 'withdrawn':
+            float_window.withdraw()
+            overlay_is_visible = False
+        else:
+            float_window.deiconify()
+            overlay_is_visible = True
     else:
         float_window = FloatingWindow(root)
+        overlay_is_visible = True
 
-def overlay_update(ip):
+
+def overlay_update(ip):(ip):
     if float_window and float_window.winfo_exists():
         float_window.update_label(ip)
 
@@ -228,7 +239,7 @@ def create_tray_icon():
     icon = pystray.Icon('iPPY', Image.open(get_tray_icon()))
     icon.menu = pystray.Menu(
         pystray.MenuItem('Settings', settings_action),
-        pystray.MenuItem(lambda item: 'Hide IP Window' if float_window and float_window.winfo_exists() and float_window.state()!='withdrawn' else 'Show IP Window', toggle_action),
+        pystray.MenuItem(lambda item: 'Hide IP Window' if overlay_is_visible else 'Show IP Window', toggle_action),
         pystray.MenuItem('Recheck IP', recheck_action),
         pystray.MenuItem('Exit', exit_action)
     )
@@ -289,13 +300,37 @@ def update_icon():
 # Exit
 # -----------------------
 def on_exit(icon_obj, item):
+    """Exit requested from tray thread. Schedule Tk cleanup on main thread."""
+    def _shutdown():
+        global overlay_is_visible
+        try:
+            if settings_window and settings_window.winfo_exists():
+                settings_window.destroy()
+            if float_window and float_window.winfo_exists():
+                float_window.destroy()
+            overlay_is_visible = False
+            # stop the Tk loop cleanly
+            if root:
+                try:
+                    root.quit()
+                except Exception:
+                    pass
+        except Exception as e:
+            log_error(e)
     try:
-        if float_window and float_window.winfo_exists():
-            float_window.destroy()
-        icon_obj.stop()
-        os._exit(0)
-    except Exception as e:
-        log_error(e)
+        # schedule GUI teardown on main thread
+        if root:
+            root.after(0, _shutdown)
+        # stop tray icon thread
+        if icon_obj:
+            try:
+                icon_obj.visible = False
+                icon_obj.stop()
+            except Exception as e:
+                log_error(e)
+    finally:
+        # hard-exit as a fallback if something is stuck
+        threading.Timer(0.8, lambda: os._exit(0)).start()
 
 # -----------------------
 # Settings Window
