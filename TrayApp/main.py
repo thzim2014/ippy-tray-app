@@ -322,12 +322,13 @@ def create_tray():
             return "Hide IP Window"
         return "Show IP Window"
     icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
-        pystray.MenuItem("Settings", lambda i, _: toggle_float_window()),
+        pystray.MenuItem("Settings", lambda i, _: gui_queue.put((gui_show_settings, ()))),
         pystray.MenuItem(lambda item: get_window_label(), lambda i, _: toggle_float_window()),
         pystray.MenuItem("Recheck IP", lambda i, _: recheck_ip()),
         pystray.MenuItem("Exit", on_exit)
     ))
     icon.run()
+
 
 # -----------------------
 # Settings Window (Main, Logs, Update Tabs)
@@ -433,7 +434,7 @@ def on_settings(icon=None, item=None):
             command=lambda m=months: (purge_logs(m), refresh_logs())
         ).pack(side=''left', padx=5)
 
-    def purge_logs(months):
+ def purge_logs(months):
         cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
         if os.path.exists(LOG_FILE):
             with open(LOG_FILE, 'r') as f:
@@ -487,3 +488,4 @@ if __name__ == '__main__':
         root.mainloop()
     except Exception as e:
         log_error(e)
+
