@@ -1,11 +1,10 @@
-# main.py — Annotated version with GUI, tray, logging, update, and IP monitoring
-
 # PART 1 Imports, Constants, and Dependency Setup
 # -----------------------
 # Ensure Dependencies
 # -----------------------
 import subprocess
 import sys
+import threading  # Moved to top
 
 def ensure_dependencies():
     try:
@@ -26,7 +25,6 @@ ensure_dependencies()
 # -----------------------
 import os
 import time
-import threading
 import requests
 import datetime
 import tkinter as tk
@@ -43,6 +41,8 @@ import webbrowser
 # Constants & Paths
 # -----------------------
 APP_DIR = r"C:\Tools\TrayApp"
+# FIX 1: Create directories BEFORE changing working directory
+os.makedirs(APP_DIR, exist_ok=True)
 os.chdir(APP_DIR)
 LOG_DIR = os.path.join(APP_DIR, "logs")
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
@@ -53,6 +53,11 @@ ICON_GREEN_PATH = os.path.join(ASSETS_DIR, "tray_app_icon_g.ico")
 ICON_RED_PATH = os.path.join(ASSETS_DIR, "tray_app_icon_r.ico")
 LOG_FILE = os.path.join(LOG_DIR, "ipchanges.log")
 ERROR_LOG_FILE = os.path.join(LOG_DIR, "errors.log")
+
+# FIX 2: Add thread locks for file operations
+log_lock = threading.Lock()
+error_lock = threading.Lock()
+config_lock = threading.Lock()
 
 IP_API_URL = "http://ip-api.com/json/"
 DEFAULT_IP = "0.0.0.0"
@@ -80,11 +85,10 @@ monitor_event = threading.Event()
 # -----------------------
 # Ensure Required Folders
 # -----------------------
-os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(ASSETS_DIR, exist_ok=True)
 
-#PART 2 Config Management, IP Handling, Logging, and Floating Window
-#This sets up all IP config, logging, and floating UI with persistent location and color logic.
+# PART 2 Config Management, IP Handling, Logging, and Floating Window
 # -----------------------
 # Config: Load & Save
 # -----------------------
@@ -114,13 +118,16 @@ def load_config():
     else:
         config.read(CONFIG_PATH)
 
-    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
-    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
-    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
-    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=True)
+    # FIX 3: Use lock for thread-safe config access
+    with config_lock:
+        target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
+        notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
+        enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
+        always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=True)
 
 def save_config():
-    with open(CONFIG_PATH, 'w') as f:
+    # FIX 4: Thread-safe config saving
+    with config_lock, open(CONFIG_PATH, 'w') as f:
         config.write(f)
 
 # -----------------------
@@ -138,21 +145,24 @@ def get_ip():
 # Logging Logic
 # -----------------------
 def log_ip(ip, changed, manual=False):
-    if enable_logging:
-        now = datetime.datetime.now().strftime('%d/%m/%Y|%H:%M:%S')
-        with open(LOG_FILE, 'a', newline='') as f:
-            writer = csv.writer(f, delimiter='|')
-            writer.writerow([
-                now.split('|')[0],
-                now.split('|')[1],
-                target_ip,
-                ip,
-                'Yes' if changed else 'No',
-                'Yes' if manual else 'No'
-            ])
+    # FIX 5: Add thread locking for log writes
+    with log_lock:
+        if enable_logging:
+            now = datetime.datetime.now().strftime('%d/%m/%Y|%H:%M:%S')
+            with open(LOG_FILE, 'a', newline='') as f:
+                writer = csv.writer(f, delimiter='|')
+                writer.writerow([
+                    now.split('|')[0],
+                    now.split('|')[1],
+                    target_ip,
+                    ip,
+                    'Yes' if changed else 'No',
+                    'Yes' if manual else 'No'
+                ])
 
 def log_error(err):
-    with open(ERROR_LOG_FILE, 'a') as f:
+    # FIX 6: Thread-safe error logging
+    with error_lock, open(ERROR_LOG_FILE, 'a') as f:
         f.write(f"[{datetime.datetime.now()}] {str(err)}\n{traceback.format_exc()}\n")
 
 # -----------------------
@@ -166,6 +176,7 @@ def notify_change(old_ip, new_ip):
             toaster.show_toast("IP Change Detected", f"{old_ip} ➔ {new_ip}", duration=5, threaded=True)
         except Exception as e:
             log_error(e)
+
 # -----------------------
 # Floating Overlay Window
 # -----------------------
@@ -196,23 +207,21 @@ class FloatingWindow(tk.Tk):
         x = self.winfo_x() + event.x - self._x
         y = self.winfo_y() + event.y - self._y
         self.geometry(f"+{x}+{y}")
-        config['Settings']['window_x'] = str(x)
-        config['Settings']['window_y'] = str(y)
-        config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
-        save_config()
+        # FIX 7: Use thread-safe config updates
+        with config_lock:
+            config['Settings']['window_x'] = str(x)
+            config['Settings']['window_y'] = str(y)
+            config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
+            save_config()
 
 
 # PART 3 Tray Icon, IP Recheck, Monitoring, and Float Updates
-# This section powers all logic related to:
-# Tray icon color logic
-# IP monitoring in the background
-# Manual rechecking and float updates
 # -----------------------
 # Floating Label Color Updater
 # -----------------------
 def update_float_window(ip, _):
     global notified
-    if float_window:
+    if float_window and float_window.winfo_exists():  # FIX 8: Check if window exists
         float_window.label.config(text=ip)
         correct = ip == target_ip
         display_color = 'green' if correct else 'red'
@@ -225,6 +234,7 @@ def update_float_window(ip, _):
         elif notified:
             float_window.attributes("-alpha", float(config.get('Settings', 'window_alpha', fallback='0.85')))
             notified = False
+
 # -----------------------
 # Manual Recheck Button (Rate Limited)
 # -----------------------
@@ -242,6 +252,7 @@ def recheck_ip():
             update_float_window(new_ip, None)
             update_icon()
             log_ip(new_ip, changed, manual=True)
+
 # -----------------------
 # Background Monitor Thread
 # -----------------------
@@ -256,13 +267,20 @@ def monitor_ip():
                     if current_ip:
                         notify_change(current_ip, new_ip)
                     current_ip = new_ip
-                update_float_window(new_ip, None)
+                # FIX 9: Add existence check before updating
+                if float_window and float_window.winfo_exists():
+                    update_float_window(new_ip, None)
                 update_icon()
                 log_ip(new_ip, changed, manual=False)
         except Exception as e:
             log_error(e)
 
-        interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
+        # FIX 10: Handle invalid interval values
+        try:
+            interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='10'))))
+        except ValueError:
+            interval = 10
+            
         if monitor_event.wait(timeout=60 / interval):
             monitor_event.clear()
 
@@ -272,16 +290,25 @@ def monitor_ip():
 def toggle_float_window():
     global float_window
     if float_window:
-        if float_window.state() == 'withdrawn':
-            float_window.deiconify()
-        else:
-            float_window.withdraw()
-    else:
-        def run():
-            global float_window
-            float_window = FloatingWindow()
-            float_window.mainloop()
-        threading.Thread(target=run, daemon=True).start()
+        # FIX 11: Add proper window state checks
+        try:
+            if float_window.state() == 'withdrawn':
+                float_window.deiconify()
+            else:
+                float_window.withdraw()
+        except tk.TclError:
+            # Window was destroyed, create new
+            float_window = None
+    
+    if not float_window:
+        # FIX 12: Create window in main thread
+        create_float_window()
+
+def create_float_window():
+    global float_window
+    float_window = FloatingWindow()
+    # Start in separate thread but keep GUI in main thread
+    threading.Thread(target=float_window.mainloop, daemon=True).start()
 
 def get_tray_icon():
     return ICON_GREEN_PATH if current_ip == target_ip else ICON_RED_PATH
@@ -293,11 +320,8 @@ def update_icon():
             icon.title = f"IP: {current_ip or 'Unknown'}"
         except Exception as e:
             log_error(e)
-# PART 4 Tray Menu & Settings GUI (Main, Logs, Update Tabs)
-# This portion builds the system tray icon with its menu and constructs the Main tab of the settings window, including:
-# - IP to monitor
-# - Interval
-# - Checkboxes for notify, logging, always-on-screen
+
+# PART 4 Tray Menu & Settings GUI
 # -----------------------
 # Tray Exit Logic
 # -----------------------
@@ -316,19 +340,28 @@ def on_exit(icon, item):
 def create_tray():
     global icon
     def get_window_label():
-        if float_window and float_window.state() != 'withdrawn':
+        if float_window and float_window.winfo_exists() and float_window.state() != 'withdrawn':
             return "Hide IP Window"
         return "Show IP Window"
 
-    icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
+    menu_items = [
         pystray.MenuItem("Settings", on_settings),
         pystray.MenuItem(lambda item: get_window_label(), lambda i, _: toggle_float_window()),
         pystray.MenuItem("Recheck IP", lambda i, _: recheck_ip()),
         pystray.MenuItem("Exit", on_exit)
-    ))
+    ]
+    
+    # FIX 13: Handle icon reloading
+    try:
+        icon_image = Image.open(get_tray_icon())
+    except:
+        icon_image = Image.new('RGB', (64, 64), 'white')
+        
+    icon = pystray.Icon("iPPY", icon_image, menu=pystray.Menu(*menu_items))
     icon.run()
+
 # -----------------------
-# Settings Window (Main, Logs, Update Tabs)
+# Settings Window
 # -----------------------
 def on_settings(icon=None, item=None):
     from tkinter import BooleanVar, StringVar
@@ -367,13 +400,6 @@ def on_settings(icon=None, item=None):
     tk.Checkbutton(main, text="Enable Logging", variable=log_var).pack(anchor='w')
     tk.Checkbutton(main, text="Always on Screen", variable=screen_var).pack(anchor='w')
 
-    # PART 5: Logs Tab – Filter, Search, Sort, Export
-    # This builds the Logs tab:
-    # Filter logs to only show “changed” entries
-    # Real-time search
-    # Column sorting (clickable)
-    # Export to CSV
-    # Reusable refresh function
     # -----------------------
     # LOGS TAB CONTENT
     # -----------------------
@@ -398,36 +424,56 @@ def on_settings(icon=None, item=None):
 
     def refresh_logs():
         log_table.delete(*log_table.get_children())
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
-                for row in csv.reader(f, delimiter='|'):
-                    if len(row) == 6:
-                        if filter_var.get() and row[4] != 'Yes':
-                            continue
-                        if search_var.get().lower() not in '|'.join(row).lower():
-                            continue
-                        log_table.insert('', 'end', values=row)
+        # FIX 14: Thread-safe log reading
+        with log_lock:
+            if os.path.exists(LOG_FILE):
+                with open(LOG_FILE, 'r') as f:
+                    for row in csv.reader(f, delimiter='|'):
+                        if len(row) == 6:
+                            if filter_var.get() and row[4] != 'Yes':
+                                continue
+                            if search_var.get().lower() not in '|'.join(row).lower():
+                                continue
+                            log_table.insert('', 'end', values=row)
 
     def export_logs(table):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
         if not path:
             return
-        with open(path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Date', 'Time', 'Expected IP', 'Detected IP', 'Changed', 'Manual'])
-            for child in table.get_children():
-                writer.writerow(table.item(child)['values'])
+        with log_lock:  # FIX 15: Lock during export
+            with open(path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Date', 'Time', 'Expected IP', 'Detected IP', 'Changed', 'Manual'])
+                for child in table.get_children():
+                    writer.writerow(table.item(child)['values'])
 
     tk.Checkbutton(logs, text="Only show changed", variable=filter_var, command=refresh_logs).pack(anchor='w')
     tk.Button(logs, text="Export to CSV", command=lambda: export_logs(log_table)).pack(anchor='e', pady=2, padx=2)
     search_var.trace_add('write', lambda *_: refresh_logs())
     refresh_logs()
 
-    # PART 6: Update Tab & Version Checking
-    # This section enables:
-    # Checking your GitHub-hosted version.txt
-    # Alert if a newer version is available
-    # Directs to GitHub for manual update
+    # FIX 16: Add log purge section
+    purge_frame = tk.Frame(logs)
+    purge_frame.pack(pady=5)
+    tk.Label(purge_frame, text="Purge logs older than:").pack(side='left')
+    for months in [1, 2, 3]:
+        tk.Button(
+            purge_frame,
+            text=f"{months}m",
+            command=lambda m=months: (purge_logs(m), refresh_logs())
+        ).pack(side='left', padx=5)
+
+    def purge_logs(months):
+        cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
+        with log_lock:  # Thread-safe purge
+            if os.path.exists(LOG_FILE):
+                with open(LOG_FILE, 'r') as f:
+                    rows = list(csv.reader(f, delimiter='|'))
+                filtered = [row for row in rows if datetime.datetime.strptime(row[0], '%d/%m/%Y') >= cutoff]
+                with open(LOG_FILE, 'w', newline='') as f:
+                    writer = csv.writer(f, delimiter='|')
+                    writer.writerows(filtered)
+
     # -----------------------
     # UPDATE TAB
     # -----------------------
@@ -457,79 +503,41 @@ def on_settings(icon=None, item=None):
 
     check_for_update()
 
-    # PART 7: Log Purging & Saving Settings
-    # Purge logs UI
-    # Save & Close logic for all config updates
-    # main() execution entrypoint
-    # -----------------------
-    # PURGE OLD LOGS SECTION
-    # -----------------------
-    purge_frame = tk.Frame(logs)
-    purge_frame.pack(pady=5)
-
-    tk.Label(purge_frame, text="Purge logs older than:").pack(side='left')
-
-    for months in [1, 2, 3]:
-        tk.Button(
-            purge_frame,
-            text=f"{months}m",
-            command=lambda m=months: (purge_logs(m), refresh_logs())
-        ).pack(side='left', padx=5)
-
-    def purge_logs(months):
-        cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
-                rows = list(csv.reader(f, delimiter='|'))
-            filtered = [row for row in rows if datetime.datetime.strptime(row[0], '%d/%m/%Y') >= cutoff]
-            with open(LOG_FILE, 'w', newline='') as f:
-                writer = csv.writer(f, delimiter='|')
-                writer.writerows(filtered)
-    # PART 8: Saving Settings & Closing
-    # This part:
-    # Lets you purge logs by age
-    # Applies and saves all setting values
-    # Closes the settings window cleanly
     # -----------------------
     # SAVE AND CLOSE
     # -----------------------
     def save_and_close():
+        # FIX 17: Validate interval input
+        try:
+            interval = max(1, min(45, int(interval_entry.get().strip() or 10)))
+        except ValueError:
+            interval = 10
+            
+        # Save settings
         config.set('Settings', 'target_ip', ip_entry.get().strip())
-        config.set('Settings', 'check_interval', str(max(1, min(45, int(interval_entry.get().strip() or 1)))))
+        config.set('Settings', 'check_interval', str(interval))
         config.set('Settings', 'notify_on_change', 'yes' if notify_var.get() else 'no')
         config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
         config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
         save_config()
 
-        # Reload settings and apply to runtime globals
+        # Reload settings
         load_config()
 
-        # Update icon to reflect new target IP
+        # Update UI
         update_icon()
-
-        # Wake the IP monitor so it uses the new interval immediately
         monitor_event.set()
 
-        # Handle always-on-screen toggle
+        # Handle window visibility
         if always_on_screen:
-            if not float_window or float_window.state() == 'withdrawn':
-                toggle_float_window()
-        else:
-            if float_window and float_window.state() != 'withdrawn':
-                toggle_float_window()
-
+            if not float_window or not float_window.winfo_exists():
+                create_float_window()
         win.destroy()
 
     tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
     win.mainloop()
+
 # PART 9: Main Entrypoint Execution
-# This final block does:
-# Loads your saved config.ini
-# Shows the settings GUI if it's the first time the app is run
-# Automatically opens the floating IP window if enabled
-# Starts the tray icon interface in the background
-# Begins continuous IP monitoring and log handling
-# Logs any startup failures to errors.log
 # -----------------------
 # MAIN APPLICATION START
 # -----------------------
@@ -544,12 +552,12 @@ if __name__ == '__main__':
 
         # Show the floating window if always_on_screen is enabled
         if always_on_screen:
-            toggle_float_window()
+            create_float_window()
 
         # Launch tray icon in a background thread
         threading.Thread(target=create_tray, daemon=True).start()
 
-        # Start IP monitor loop (runs forever)
+        # Start IP monitor loop
         monitor_ip()
 
     except Exception as e:
