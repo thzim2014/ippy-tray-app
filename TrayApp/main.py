@@ -15,31 +15,31 @@
 # -----------------------
 # PART 5: Logs Tab – Filter, Search, Sort, Export
 # This builds the Logs tab:
-# ✅ Filter logs to only show “changed” entries
-# ✅ Real-time search
-# ✅ Column sorting (clickable)
-# ✅ Export to CSV
-# ✅ Reusable refresh function
+#  Filter logs to only show “changed” entries
+#  Real-time search
+#  Column sorting (clickable)
+#  Export to CSV
+#  Reusable refresh function
 # -----------------------
 # PART 6: Update Tab & Version Checking
 # This section enables:
-# 🔍 Checking your GitHub-hosted version.txt
-# 🔔 Alert if a newer version is available
-# 🔗 Directs to GitHub for manual update
+#  Checking your GitHub-hosted version.txt
+#  Alert if a newer version is available
+#  Directs to GitHub for manual update
 # -----------------------
-# 💾 PART 7: Log Purging & Saving Settings
-# 🧹 Purge logs UI
-# 💾 Save & Close logic for all config updates
-# 🧠 main() execution entrypoint
+#  PART 7: Log Purging & Saving Settings
+#  Purge logs UI
+#  Save & Close logic for all config updates
+#  main() execution entrypoint
 # -----------------------
-# 🧠 PART 8: Saving Settings & Closing
-# ✅ This part:
+#  PART 8: Saving Settings & Closing
+#  This part:
 # Lets you purge logs by age
 # Applies and saves all setting values
 # Closes the settings window cleanly
-#  🏁 PART 9: Main Entrypoint Execution
+#  PART 9: Main Entrypoint Execution
 # -----------------------
-# ✅ main.py — Part 10: Tray Menu & Window Toggle Logic
+#  main.py — Part 10: Tray Menu & Window Toggle Logic
 # This section is responsible for:
 # Building the system tray icon and its right-click menu
 # Handling:
@@ -52,14 +52,14 @@
 	
 
 # -----------------------
-#✅ main.py — Part 1: Imports, Constants & Dependency Setup
+# main.py — Part 1: Imports, Constants & Dependency Setup
 # =============================================
 # iPPY Tray App - IP Monitor & Tray Utility
 # Main script: Handles GUI, tray icon, logging,
 # settings, update checking and IP monitoring
 # =============================================
 # -----------------------
-# 📦 Ensure Required Modules Are Installed
+# Ensure Required Modules Are Installed
 # -----------------------
 import subprocess
 import sys
@@ -79,7 +79,7 @@ def ensure_dependencies():
 ensure_dependencies()
 
 # -----------------------
-# 📚 Core Imports
+# Core Imports
 # -----------------------
 import os
 import time
@@ -100,9 +100,9 @@ import webbrowser
 
 
 # -----------------------
-#✅ main.py — Part 2: Paths, Globals, Folders
+# main.py — Part 2: Paths, Globals, Folders
 # -----------------------
-# 📁 Paths & Constants
+# Paths & Constants
 # -----------------------
 APP_DIR = r"C:\Tools\TrayApp"
 os.chdir(APP_DIR)
@@ -124,7 +124,7 @@ IP_API_URL = "http://ip-api.com/json/"
 DEFAULT_IP = "0.0.0.0"
 
 # -----------------------
-# 🌐 Global Runtime State
+# Global Runtime State
 # -----------------------
 current_ip = None
 icon = None
@@ -135,7 +135,7 @@ last_manual_check = 0
 first_run = False
 
 # -----------------------
-# 🗂️ Ensure Folder Structure Exists
+#  Ensure Folder Structure Exists
 # -----------------------
 os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -144,9 +144,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 
 # -----------------------
-#✅ main.py — Part 3: Config Management, Logging, IP Utilities
+# main.py — Part 3: Config Management, Logging, IP Utilities
 # -----------------------
-# ⚙️ Load & Save Configuration
+# Load & Save Configuration
 # -----------------------
 def load_config():
     global first_run
@@ -174,7 +174,7 @@ def save_config():
         config.write(f)
 
 # -----------------------
-# 🌍 Get External IP
+#  Get External IP
 # -----------------------
 def get_ip():
     try:
@@ -185,7 +185,7 @@ def get_ip():
         return None
 
 # -----------------------
-# 📝 Log IP Checks
+#  Log IP Checks
 # -----------------------
 def log_ip(ip, changed, manual=False):
     if config.getboolean('Settings', 'enable_logging', fallback=True):
@@ -209,9 +209,9 @@ def log_error(err):
 
 
 # -----------------------
-#✅ main.py — Part 4: Toasts, Floating Window Class
+# main.py — Part 4: Toasts, Floating Window Class
 # -----------------------
-# 🔔 Windows Toast Notifications
+# Windows Toast Notifications
 # -----------------------
 toaster = ToastNotifier()
 
@@ -258,11 +258,10 @@ class FloatingWindow(tk.Tk):
         save_config()
 
 
-
 # -----------------------
-#✅ main.py — Part 5: IP Monitoring, Tray Icon, Safe Threading
-# -----------------------
-# 🎨 Update Floating Window Label Color
+# main.py Part 5 IP Monitoring Tray Icon Safe Threading
+#-----------------------
+# Update Floating Window Label Color
 # -----------------------
 def update_float_window(ip, _):
     global notified
@@ -280,7 +279,7 @@ def update_float_window(ip, _):
             notified = False
 
 # -----------------------
-# 🔁 Manual Recheck Button
+#  Manual Recheck Button
 # -----------------------
 def recheck_ip():
     global last_manual_check, current_ip
@@ -299,9 +298,9 @@ def recheck_ip():
 
 
 # -----------------------
-#✅ main.py — Part 6: Monitor IP Loop (Threaded)
+# main.py — Part 6: Monitor IP Loop (Threaded)
 # -----------------------
-# 📡 Background IP Monitor Loop
+# Background IP Monitor Loop
 # -----------------------
 def monitor_ip():
     global current_ip
@@ -324,11 +323,10 @@ def monitor_ip():
         time.sleep(60 / interval)
 
 
-
 # -----------------------
-#✅ main.py — Part 7: Tray Icon & Safe Float Toggle
+# main.py— Part 7: Tray Icon & Safe Float Toggle
 # -----------------------
-# 🪟 Safely Toggle Floating IP Window
+# Safely Toggle Floating IP Window
 # -----------------------
 def toggle_float_window():
     global float_window
@@ -346,7 +344,7 @@ def toggle_float_window():
         threading.Thread(target=run_float, daemon=True).start()
 
 # -----------------------
-# 🖼️ Tray Icon Selector
+# Tray Icon Selector
 # -----------------------
 def get_tray_icon():
     target_ip = config['Settings']['target_ip']
@@ -360,13 +358,10 @@ def update_icon():
         except Exception as e:
             log_error(e)
 
-
-
-
 # -----------------------
-#✅ main.py — Part 8: Tray Menu, Exit, Safe Settings Window
+# main.py — Part 8: Tray Menu, Exit, Safe Settings Window
 # -----------------------
-# 🚪 Tray Icon Exit Handler
+# Tray Icon Exit Handler
 # -----------------------
 def on_exit(icon, item):
     try:
@@ -376,9 +371,8 @@ def on_exit(icon, item):
         os._exit(0)
     except Exception as e:
         log_error(e)
-
 # -----------------------
-# 🍔 Create Tray Icon Menu
+# Create Tray Icon Menu
 # -----------------------
 def create_tray():
     global icon
@@ -397,13 +391,10 @@ def create_tray():
     ))
     icon.run()
 
-
-
-
 # -----------------------
-#✅ main.py — Part 9: Main Thread Executor (Fixes GUI issues)
+# main.py — Part 9: Main Thread Executor (Fixes GUI issues)
 # -----------------------
-# 🧠 Ensures tkinter runs in main thread
+# Ensures tkinter runs in main thread
 # -----------------------
 def run_in_main_thread(func):
     import ctypes
@@ -416,13 +407,10 @@ def run_in_main_thread(func):
             ctypes.py_object(SystemExit)
         )
 
-
-
-
 # -----------------------
-#✅ main.py — Part 10: Settings Window, Logs Tab, Update Checker
+# main.py — Part 10: Settings Window, Logs Tab, Update Checker
 # -----------------------
-# 🧊 Tray Icon Display & Toggle Float Window
+# Tray Icon Display & Toggle Float Window
 # -----------------------
 def toggle_float_window():
     global float_window
@@ -449,7 +437,7 @@ def update_icon():
             log_error(e)
 
 # -----------------------
-# 🚪 Tray Exit Logic
+# Tray Exit Logic
 # -----------------------
 def on_exit(icon, item):
     try:
@@ -461,7 +449,7 @@ def on_exit(icon, item):
         log_error(e)
 
 # -----------------------
-# 🍔 Create the Tray Menu
+# Create the Tray Menu
 # -----------------------
 def create_tray():
     global icon
@@ -477,13 +465,12 @@ def create_tray():
         pystray.MenuItem("Exit", on_exit)
     ))
     icon.run()
-	
-	
-	
+
+
 # -----------------------
-#✅ main.py — Part 11: Full on_settings() GUI: Settings, Logs, Updates
+# main.py — Part 11: Full on_settings() GUI: Settings, Logs, Updates
 # -----------------------
-# ⚙️ Settings Window with Tabs
+# Settings Window with Tabs
 # -----------------------
 def on_settings(icon=None, item=None):
     from tkinter import BooleanVar, StringVar
