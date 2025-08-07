@@ -100,8 +100,8 @@ def load_config():
             'enable_logging': 'yes',
             'always_on_screen': 'yes',
             'window_alpha': '0.85',
-            'window_x': '700',
-            'window_y': '900'
+            'window_x': '1115',
+            'window_y': '303'
         }
     }
 
