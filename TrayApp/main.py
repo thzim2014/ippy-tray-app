@@ -260,7 +260,7 @@ class FloatingWindow(tk.Tk):
 
 
 # -----------------------
-✅ main.py — Part 5: IP Monitoring, Tray Icon, Safe Threading
+#✅ main.py — Part 5: IP Monitoring, Tray Icon, Safe Threading
 # -----------------------
 # 🎨 Update Floating Window Label Color
 # -----------------------
