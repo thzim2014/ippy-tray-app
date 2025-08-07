@@ -68,6 +68,15 @@ notified = False
 last_manual_check = 0
 first_run = False
 
+# Runtime settings cached from config.ini
+target_ip = DEFAULT_IP
+notify_on_change = True
+enable_logging = True
+always_on_screen = False
+
+# Event used to wake monitor thread when settings change
+monitor_event = threading.Event()
+
 # -----------------------
 # Ensure Required Folders
 # -----------------------
@@ -80,7 +89,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # Config: Load & Save
 # -----------------------
 def load_config():
-    global first_run
+    global first_run, target_ip, notify_on_change, enable_logging, always_on_screen
     default_config = {
         'Settings': {
             'target_ip': DEFAULT_IP,
@@ -99,6 +108,11 @@ def load_config():
         first_run = True
     else:
         config.read(CONFIG_PATH)
+
+    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
+    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
+    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
+    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=False)
 
 def save_config():
     with open(CONFIG_PATH, 'w') as f:
@@ -119,15 +133,14 @@ def get_ip():
 # Logging Logic
 # -----------------------
 def log_ip(ip, changed, manual=False):
-    if config.getboolean('Settings', 'enable_logging', fallback=True):
+    if enable_logging:
         now = datetime.datetime.now().strftime('%d/%m/%Y|%H:%M:%S')
-        expected_ip = config.get('Settings', 'target_ip')
         with open(LOG_FILE, 'a', newline='') as f:
             writer = csv.writer(f, delimiter='|')
             writer.writerow([
                 now.split('|')[0],
                 now.split('|')[1],
-                expected_ip,
+                target_ip,
                 ip,
                 'Yes' if changed else 'No',
                 'Yes' if manual else 'No'
@@ -143,7 +156,7 @@ def log_error(err):
 toaster = ToastNotifier()
 
 def notify_change(old_ip, new_ip):
-    if config.getboolean('Settings', 'notify_on_change', fallback=True):
+    if notify_on_change:
         try:
             toaster.show_toast("IP Change Detected", f"{old_ip} ➔ {new_ip}", duration=5, threaded=True)
         except Exception as e:
@@ -196,7 +209,6 @@ def update_float_window(ip, _):
     global notified
     if float_window:
         float_window.label.config(text=ip)
-        target_ip = config.get('Settings', 'target_ip', fallback='0.0.0.0')
         correct = ip == target_ip
         display_color = 'green' if correct else 'red'
         float_window.label.config(bg=display_color)
@@ -244,7 +256,8 @@ def monitor_ip():
             log_error(e)
 
         interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
-        time.sleep(60 / interval)
+        if monitor_event.wait(timeout=60 / interval):
+            monitor_event.clear()
 
 # -----------------------
 # Tray Icon Display & Toggle Float Window
@@ -264,7 +277,6 @@ def toggle_float_window():
         threading.Thread(target=run, daemon=True).start()
 
 def get_tray_icon():
-    target_ip = config['Settings']['target_ip']
     return ICON_GREEN_PATH if current_ip == target_ip else ICON_RED_PATH
 
 def update_icon():
@@ -481,6 +493,24 @@ def on_settings(icon=None, item=None):
         config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
         config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
         save_config()
+
+        # Reload settings and apply to runtime globals
+        load_config()
+
+        # Update icon to reflect new target IP
+        update_icon()
+
+        # Wake the IP monitor so it uses the new interval immediately
+        monitor_event.set()
+
+        # Handle always-on-screen toggle
+        if always_on_screen:
+            if not float_window or float_window.state() == 'withdrawn':
+                toggle_float_window()
+        else:
+            if float_window and float_window.state() != 'withdrawn':
+                toggle_float_window()
+
         win.destroy()
 
     tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
@@ -506,7 +536,7 @@ if __name__ == '__main__':
             on_settings()
 
         # Show the floating window if always_on_screen is enabled
-        if config.getboolean('Settings', 'always_on_screen'):
+        if always_on_screen:
             toggle_float_window()
 
         # Launch tray icon in a background thread
