@@ -260,11 +260,9 @@ def toggle_float_window():
         else:
             float_window.withdraw()
     else:
-        def run():
-            global float_window
-            float_window = FloatingWindow()
-            float_window.mainloop()
-        threading.Thread(target=run, daemon=True).start()
+        float_window = FloatingWindow()
+        float_window.after(0, float_window.deiconify)
+
 
 def get_tray_icon():
     target_ip = config['Settings']['target_ip']
