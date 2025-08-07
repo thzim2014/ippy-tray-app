@@ -72,7 +72,7 @@ first_run = False
 target_ip = DEFAULT_IP
 notify_on_change = True
 enable_logging = True
-always_on_screen = False
+always_on_screen = True
 
 # Event used to wake monitor thread when settings change
 monitor_event = threading.Event()
@@ -89,7 +89,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # Config: Load & Save
 # -----------------------
 def load_config():
-    global first_run
+    global first_run, target_ip, notify_on_change, enable_logging, always_on_screen
     first_run = False
 
     default_config = {
@@ -112,10 +112,10 @@ def load_config():
     else:
         config.read(CONFIG_PATH)
 
-#    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
-#    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
-#    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
-#    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=False)
+    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
+    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
+    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
+    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=True)
 
 def save_config():
     with open(CONFIG_PATH, 'w') as f:
