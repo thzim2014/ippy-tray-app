@@ -432,7 +432,7 @@ def on_settings(icon=None, item=None):
             purge_frame,
             text=f"{months}m",
             command=lambda m=months: (purge_logs(m), refresh_logs())
-        ).pack(side=''left', padx=5)
+        ).pack(side='left', padx=5)
 
  def purge_logs(months):
         cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
