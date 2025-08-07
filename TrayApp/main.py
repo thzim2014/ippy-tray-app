@@ -96,7 +96,8 @@ def load_config():
     global first_run, target_ip, notify_on_change, enable_logging, always_on_screen
     first_run = False
 
-    config = configparser.ConfigParser()
+    if not hasattr(config, 'sections'):
+        config = configparser.ConfigParser()
 
     default_config = {
         'Settings': {
@@ -119,15 +120,36 @@ def load_config():
         config.read(CONFIG_PATH)
 
     # FIX 3: Use lock for thread-safe config access
-    with config_lock:
-        target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
-        notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
-        enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
-        always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=True)
+    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
+    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
+    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
+    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=True)
 
 def save_config():
-    # FIX 4: Thread-safe config saving
-    with config_lock, open(CONFIG_PATH, 'w') as f:
+    # FIX: Make sure we have a valid config object before writing
+    if not hasattr(config, 'sections'):
+        config = configparser.ConfigParser()
+        config.add_section('Settings')
+    
+    # FIX: Ensure all settings exist before saving
+    if not config.has_section('Settings'):
+        config.add_section('Settings')
+    
+    # FIX: Set default values if any are missing
+    for key, default in [
+        ('target_ip', DEFAULT_IP),
+        ('check_interval', '10'),
+        ('notify_on_change', 'yes'),
+        ('enable_logging', 'yes'),
+        ('always_on_screen', 'yes'),
+        ('window_alpha', '0.85'),
+        ('window_x', '1115'),
+        ('window_y', '303')
+    ]:
+        if not config.has_option('Settings', key):
+            config.set('Settings', key, default)
+    
+    with open(CONFIG_PATH, 'w') as f:
         config.write(f)
 
 # -----------------------
@@ -506,33 +528,41 @@ def on_settings(icon=None, item=None):
     # -----------------------
     # SAVE AND CLOSE
     # -----------------------
-    def save_and_close():
-        # FIX 17: Validate interval input
-        try:
-            interval = max(1, min(45, int(interval_entry.get().strip() or 10)))
-        except ValueError:
-            interval = 10
-            
-        # Save settings
-        config.set('Settings', 'target_ip', ip_entry.get().strip())
-        config.set('Settings', 'check_interval', str(interval))
-        config.set('Settings', 'notify_on_change', 'yes' if notify_var.get() else 'no')
-        config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
-        config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
-        save_config()
+def save_and_close():
+    # FIX: Validate interval input
+    try:
+        interval = max(1, min(45, int(interval_entry.get().strip() or 10)))
+    except ValueError:
+        interval = 10
+        
+    # FIX: Update the global config object directly
+    config.set('Settings', 'target_ip', ip_entry.get().strip())
+    config.set('Settings', 'check_interval', str(interval))
+    config.set('Settings', 'notify_on_change', 'yes' if notify_var.get() else 'no')
+    config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
+    config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
+    
+    # FIX: Save the updated config
+    save_config()
 
-        # Reload settings
-        load_config()
+    # Reload settings and apply to runtime globals
+    load_config()
 
-        # Update UI
-        update_icon()
-        monitor_event.set()
+    # Update icon to reflect new target IP
+    update_icon()
 
-        # Handle window visibility
-        if always_on_screen:
-            if not float_window or not float_window.winfo_exists():
-                create_float_window()
-        win.destroy()
+    # Wake the IP monitor so it uses the new interval immediately
+    monitor_event.set()
+
+    # Handle always-on-screen toggle
+    if always_on_screen:
+        if not float_window or not float_window.winfo_exists():
+            create_float_window()
+    else:
+        if float_window and float_window.winfo_exists():
+            float_window.withdraw()
+
+    win.destroy()
 
     tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
     win.mainloop()
