@@ -60,19 +60,19 @@ DEFAULT_IP = "0.0.0.0"
 # -----------------------
 # Global State
 # -----------------------
-#current_ip = None
-#icon = None
-#float_window = None
+current_ip = None
+icon = None
+float_window = None
 config = configparser.ConfigParser()
-#notified = False
-#last_manual_check = 0
-#first_run = False
+notified = False
+last_manual_check = 0
+first_run = False
 
 # Runtime settings cached from config.ini
-#target_ip = DEFAULT_IP
-#notify_on_change = True
-#enable_logging = True
-#always_on_screen = False
+target_ip = DEFAULT_IP
+notify_on_change = True
+enable_logging = True
+always_on_screen = False
 
 # Event used to wake monitor thread when settings change
 monitor_event = threading.Event()
@@ -89,7 +89,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # Config: Load & Save
 # -----------------------
 def load_config():
-    global first_run, target_ip, notify_on_change, enable_logging, always_on_screen
+    global first_run
+    first_run = False
+
     default_config = {
         'Settings': {
             'target_ip': DEFAULT_IP,
@@ -102,6 +104,7 @@ def load_config():
             'window_y': '900'
         }
     }
+
     if not os.path.exists(CONFIG_PATH):
         config.read_dict(default_config)
         save_config()
@@ -109,10 +112,10 @@ def load_config():
     else:
         config.read(CONFIG_PATH)
 
-    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
-    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
-    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
-    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=False)
+#    target_ip = config.get('Settings', 'target_ip', fallback=DEFAULT_IP)
+#    notify_on_change = config.getboolean('Settings', 'notify_on_change', fallback=True)
+#    enable_logging = config.getboolean('Settings', 'enable_logging', fallback=True)
+#    always_on_screen = config.getboolean('Settings', 'always_on_screen', fallback=False)
 
 def save_config():
     with open(CONFIG_PATH, 'w') as f:
