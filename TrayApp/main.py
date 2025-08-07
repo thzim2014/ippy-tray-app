@@ -429,9 +429,7 @@ def on_settings(icon=None, item=None):
             if os.path.exists(LOG_FILE):
                 with open(LOG_FILE, 'r') as f:
                     rows = list(csv.reader(f, delimiter='|'))
-                filtered = [row for row in rows if datetime.datetime.strptime(row[0], '%d/%m/%
-# Settings GUI, Log Purging, Saving Settings, and Main Entrypoint ---
-                filtered = [row for row in rows if datetime.datetime.strptime(row[0], '%d/%m/%Y') >= cutoff]
+                filtered = [row for row in rows if len(row) == 6 and datetime.datetime.strptime(row[0], '%d/%m/%Y') >= cutoff]
                 with open(LOG_FILE, 'w', newline='') as f:
                     writer = csv.writer(f, delimiter='|')
                     writer.writerows(filtered)
@@ -448,20 +446,23 @@ def on_settings(icon=None, item=None):
             update_icon()
             monitor_event.set()
             # Handle always_on_screen immediately
-            if always_on_screen:
-                if not float_window or float_window.state() == 'withdrawn':
-                    toggle_float_window()
-            else:
-                if float_window and float_window.state() != 'withdrawn':
-                    toggle_float_window()
+            try:
+                if always_on_screen:
+                    if not float_window or not float_window.winfo_exists() or float_window.state() == 'withdrawn':
+                        toggle_float_window()
+                else:
+                    if float_window and float_window.winfo_exists() and float_window.state() != 'withdrawn':
+                        toggle_float_window()
+            except Exception as e:
+                log_error(e)
             win.destroy()
         tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
         win.mainloop()
-    # Always open GUI on main thread
-    threading.Thread(target=_on_settings_inner, daemon=True).start()
+    # GUI must run on main thread (no extra thread)
+    _on_settings_inner()
 
 # -----------------------
-# MAIN APPLICATION START
+# MAIN APPLICATION START (FIXED)
 # -----------------------
 if __name__ == '__main__':
     try:
@@ -471,6 +472,11 @@ if __name__ == '__main__':
         if always_on_screen:
             toggle_float_window()
         threading.Thread(target=create_tray, daemon=True).start()
-        monitor_ip()
+        threading.Thread(target=monitor_ip, daemon=True).start()
+        # Keep main thread alive with a small Tk root (to ensure tkinter events fire for floats)
+        root = tk.Tk()
+        root.withdraw()
+        root.mainloop()
     except Exception as e:
         log_error(e)
+
