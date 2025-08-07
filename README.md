@@ -63,7 +63,7 @@ C:\Tools\TrayApp
 │   ├── tray_app_icon_r.ico
 │   ├── requirements.txt
 │   ├── version.txt
-│   └── config.ini
+│   └── config.ini ## This is Created Automatically And Is Not Pulled ##
 ```
 
 ---
