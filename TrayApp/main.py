@@ -1,8 +1,65 @@
-# main.py — Annotated version with GUI, tray, logging, update, and IP monitoring
-
-# PART 1 Imports, Constants, and Dependency Setup
+#PART 2 Config Management, IP Handling, Logging, and Floating Window
+#This sets up all IP config, logging, and floating UI with persistent location and color logic.
 # -----------------------
-# 📦 Ensure Dependencies
+# PART 3 Tray Icon, IP Recheck, Monitoring, and Float Updates
+# This section powers all logic related to:
+# Tray icon color logic
+# IP monitoring in the background
+# Manual rechecking and float updates
+# -----------------------
+#PART 4 Tray Menu & Settings GUI (Main, Logs, Update Tabs)
+# This portion builds the system tray icon with its menu and constructs the Main tab of the settings window, including:
+# - IP to monitor
+# - Interval
+# - Checkboxes for notify, logging, always-on-screen
+# -----------------------
+# PART 5: Logs Tab – Filter, Search, Sort, Export
+# This builds the Logs tab:
+# ✅ Filter logs to only show “changed” entries
+# ✅ Real-time search
+# ✅ Column sorting (clickable)
+# ✅ Export to CSV
+# ✅ Reusable refresh function
+# -----------------------
+# PART 6: Update Tab & Version Checking
+# This section enables:
+# 🔍 Checking your GitHub-hosted version.txt
+# 🔔 Alert if a newer version is available
+# 🔗 Directs to GitHub for manual update
+# -----------------------
+# 💾 PART 7: Log Purging & Saving Settings
+# 🧹 Purge logs UI
+# 💾 Save & Close logic for all config updates
+# 🧠 main() execution entrypoint
+# -----------------------
+# 🧠 PART 8: Saving Settings & Closing
+# ✅ This part:
+# Lets you purge logs by age
+# Applies and saves all setting values
+# Closes the settings window cleanly
+#  🏁 PART 9: Main Entrypoint Execution
+# -----------------------
+# ✅ main.py — Part 10: Tray Menu & Window Toggle Logic
+# This section is responsible for:
+# Building the system tray icon and its right-click menu
+# Handling:
+# Launching the settings window
+# Showing/hiding the floating window
+# Manual IP recheck
+# Exiting the app cleanly
+# -----------------------
+
+	
+
+# -----------------------
+#✅ main.py — Part 1: Imports, Constants & Dependency Setup
+# =============================================
+# iPPY Tray App - IP Monitor & Tray Utility
+# Main script: Handles GUI, tray icon, logging,
+# settings, update checking and IP monitoring
+# =============================================
+# -----------------------
+# 📦 Ensure Required Modules Are Installed
 # -----------------------
 import subprocess
 import sys
@@ -39,18 +96,27 @@ import csv
 import traceback
 import webbrowser
 
+
+
+
 # -----------------------
-# 📁 Constants & Paths
+#✅ main.py — Part 2: Paths, Globals, Folders
+# -----------------------
+# 📁 Paths & Constants
 # -----------------------
 APP_DIR = r"C:\Tools\TrayApp"
 os.chdir(APP_DIR)
+
 LOG_DIR = os.path.join(APP_DIR, "logs")
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
+
 CONFIG_PATH = os.path.join(ASSETS_DIR, "config.ini")
 VERSION_PATH = os.path.join(ASSETS_DIR, "version.txt")
 REMOTE_VERSION_URL = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/refs/heads/main/assets/version.txt"
+
 ICON_GREEN_PATH = os.path.join(ASSETS_DIR, "tray_app_icon_g.ico")
 ICON_RED_PATH = os.path.join(ASSETS_DIR, "tray_app_icon_r.ico")
+
 LOG_FILE = os.path.join(LOG_DIR, "ipchanges.log")
 ERROR_LOG_FILE = os.path.join(LOG_DIR, "errors.log")
 
@@ -58,7 +124,7 @@ IP_API_URL = "http://ip-api.com/json/"
 DEFAULT_IP = "0.0.0.0"
 
 # -----------------------
-# 🌐 Global State
+# 🌐 Global Runtime State
 # -----------------------
 current_ip = None
 icon = None
@@ -69,15 +135,18 @@ last_manual_check = 0
 first_run = False
 
 # -----------------------
-# 🛠 Ensure Required Folders
+# 🗂️ Ensure Folder Structure Exists
 # -----------------------
 os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
-#PART 2 Config Management, IP Handling, Logging, and Floating Window
-#This sets up all IP config, logging, and floating UI with persistent location and color logic.
+
+
+
 # -----------------------
-# ⚙️ Config: Load & Save
+#✅ main.py — Part 3: Config Management, Logging, IP Utilities
+# -----------------------
+# ⚙️ Load & Save Configuration
 # -----------------------
 def load_config():
     global first_run
@@ -105,7 +174,7 @@ def save_config():
         config.write(f)
 
 # -----------------------
-# 🌍 IP Detection
+# 🌍 Get External IP
 # -----------------------
 def get_ip():
     try:
@@ -116,7 +185,7 @@ def get_ip():
         return None
 
 # -----------------------
-# 📝 Logging Logic
+# 📝 Log IP Checks
 # -----------------------
 def log_ip(ip, changed, manual=False):
     if config.getboolean('Settings', 'enable_logging', fallback=True):
@@ -137,8 +206,12 @@ def log_error(err):
     with open(ERROR_LOG_FILE, 'a') as f:
         f.write(f"[{datetime.datetime.now()}] {str(err)}\n{traceback.format_exc()}\n")
 
+
+
 # -----------------------
-# 🔔 Toast Notifications
+#✅ main.py — Part 4: Toasts, Floating Window Class
+# -----------------------
+# 🔔 Windows Toast Notifications
 # -----------------------
 toaster = ToastNotifier()
 
@@ -150,7 +223,7 @@ def notify_change(old_ip, new_ip):
             log_error(e)
 
 # -----------------------
-# 🪟 Floating Overlay Window
+# 🪟 Floating Overlay Display
 # -----------------------
 class FloatingWindow(tk.Tk):
     def __init__(self):
@@ -184,14 +257,12 @@ class FloatingWindow(tk.Tk):
         config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
         save_config()
 
-# PART 3 Tray Icon, IP Recheck, Monitoring, and Float Updates
-# This section powers all logic related to:
-# Tray icon color logic
-# IP monitoring in the background
-# Manual rechecking and float updates
+
 
 # -----------------------
-# 🟩/🟥 Floating Label Color Updater
+✅ main.py — Part 5: IP Monitoring, Tray Icon, Safe Threading
+# -----------------------
+# 🎨 Update Floating Window Label Color
 # -----------------------
 def update_float_window(ip, _):
     global notified
@@ -209,7 +280,7 @@ def update_float_window(ip, _):
             notified = False
 
 # -----------------------
-# 🔁 Manual Recheck Button (Rate Limited)
+# 🔁 Manual Recheck Button
 # -----------------------
 def recheck_ip():
     global last_manual_check, current_ip
@@ -226,8 +297,11 @@ def recheck_ip():
             update_icon()
             log_ip(new_ip, changed, manual=True)
 
+
 # -----------------------
-# 📡 Background Monitor Thread
+#✅ main.py — Part 6: Monitor IP Loop (Threaded)
+# -----------------------
+# 📡 Background IP Monitor Loop
 # -----------------------
 def monitor_ip():
     global current_ip
@@ -249,31 +323,118 @@ def monitor_ip():
         interval = max(1, min(45, int(config.get('Settings', 'check_interval', fallback='1'))))
         time.sleep(60 / interval)
 
+
+
+# -----------------------
+#✅ main.py — Part 7: Tray Icon & Safe Float Toggle
+# -----------------------
+# 🪟 Safely Toggle Floating IP Window
+# -----------------------
+def toggle_float_window():
+    global float_window
+    def run_float():
+        global float_window
+        float_window = FloatingWindow()
+        float_window.mainloop()
+
+    if float_window:
+        try:
+            float_window.after(0, lambda: float_window.deiconify() if float_window.state() == 'withdrawn' else float_window.withdraw())
+        except Exception as e:
+            log_error(e)
+    else:
+        threading.Thread(target=run_float, daemon=True).start()
+
+# -----------------------
+# 🖼️ Tray Icon Selector
+# -----------------------
+def get_tray_icon():
+    target_ip = config['Settings']['target_ip']
+    return ICON_GREEN_PATH if current_ip == target_ip else ICON_RED_PATH
+
+def update_icon():
+    if icon:
+        try:
+            icon.icon = Image.open(get_tray_icon())
+            icon.title = f"IP: {current_ip or 'Unknown'}"
+        except Exception as e:
+            log_error(e)
+
+
+
+
+# -----------------------
+#✅ main.py — Part 8: Tray Menu, Exit, Safe Settings Window
+# -----------------------
+# 🚪 Tray Icon Exit Handler
+# -----------------------
+def on_exit(icon, item):
+    try:
+        if float_window:
+            float_window.destroy()
+        icon.stop()
+        os._exit(0)
+    except Exception as e:
+        log_error(e)
+
+# -----------------------
+# 🍔 Create Tray Icon Menu
+# -----------------------
+def create_tray():
+    global icon
+
+    def get_window_label():
+        if float_window and float_window.state() != 'withdrawn':
+            return "Hide IP Window"
+        return "Show IP Window"
+
+    # Safe menu creation (avoid threading errors)
+    icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
+        pystray.MenuItem("Settings", lambda i: run_in_main_thread(on_settings)),
+        pystray.MenuItem(lambda item: get_window_label(), lambda i: run_in_main_thread(toggle_float_window)),
+        pystray.MenuItem("Recheck IP", lambda i: run_in_main_thread(recheck_ip)),
+        pystray.MenuItem("Exit", on_exit)
+    ))
+    icon.run()
+
+
+
+
+# -----------------------
+#✅ main.py — Part 9: Main Thread Executor (Fixes GUI issues)
+# -----------------------
+# 🧠 Ensures tkinter runs in main thread
+# -----------------------
+def run_in_main_thread(func):
+    import ctypes
+    import inspect
+    if threading.current_thread() == threading.main_thread():
+        func()
+    else:
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_long(threading.get_ident()),
+            ctypes.py_object(SystemExit)
+        )
+
+
+
+
+# -----------------------
+#✅ main.py — Part 10: Settings Window, Logs Tab, Update Checker
 # -----------------------
 # 🧊 Tray Icon Display & Toggle Float Window
 # -----------------------
 def toggle_float_window():
-    def safe_toggle():
-        global float_window
-        if float_window:
-            if float_window.state() == 'withdrawn':
-                float_window.deiconify()
-            else:
-                float_window.withdraw()
+    global float_window
+    if float_window:
+        if float_window.state() == 'withdrawn':
+            float_window.deiconify()
         else:
-            float_window = FloatingWindow()
-            float_window.after(0, float_window.deiconify)
-
-    try:
-        # Schedule GUI interaction in main loop if float_window exists
-        if float_window:
-            float_window.after(0, safe_toggle)
-        else:
-            safe_toggle()
-    except:
-        safe_toggle()
-
-
+            float_window.withdraw()
+    else:
+        # Safe creation of floating window from main thread
+        float_window = FloatingWindow()
+        float_window.after(0, float_window.deiconify)
 
 def get_tray_icon():
     target_ip = config['Settings']['target_ip']
@@ -286,11 +447,7 @@ def update_icon():
             icon.title = f"IP: {current_ip or 'Unknown'}"
         except Exception as e:
             log_error(e)
-#PART 4 Tray Menu & Settings GUI (Main, Logs, Update Tabs)
-# This portion builds the system tray icon with its menu and constructs the Main tab of the settings window, including:
-# - IP to monitor
-# - Interval
-# - Checkboxes for notify, logging, always-on-screen
+
 # -----------------------
 # 🚪 Tray Exit Logic
 # -----------------------
@@ -315,14 +472,18 @@ def create_tray():
 
     icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
         pystray.MenuItem("Settings", on_settings),
-        pystray.MenuItem("Toggle IP Window", lambda i, _: toggle_float_window()),
+        pystray.MenuItem(lambda item: get_window_label(), lambda i, _: toggle_float_window()),
         pystray.MenuItem("Recheck IP", lambda i, _: recheck_ip()),
         pystray.MenuItem("Exit", on_exit)
     ))
     icon.run()
-
+	
+	
+	
 # -----------------------
-# 🛠 Settings Window (Main, Logs, Update Tabs)
+#✅ main.py — Part 11: Full on_settings() GUI: Settings, Logs, Updates
+# -----------------------
+# ⚙️ Settings Window with Tabs
 # -----------------------
 def on_settings(icon=None, item=None):
     from tkinter import BooleanVar, StringVar
@@ -331,6 +492,7 @@ def on_settings(icon=None, item=None):
     win.title("iPPY Settings")
     win.geometry("800x500")
 
+    # Create tabs
     tabs = ttk.Notebook(win)
     main = ttk.Frame(tabs)
     logs = ttk.Frame(tabs)
@@ -341,7 +503,7 @@ def on_settings(icon=None, item=None):
     tabs.pack(expand=1, fill='both')
 
     # -----------------------
-    # 📋 MAIN TAB CONTENT
+    # MAIN TAB
     # -----------------------
     tk.Label(main, text="IP To Monitor:").pack()
     ip_entry = tk.Entry(main)
@@ -361,15 +523,8 @@ def on_settings(icon=None, item=None):
     tk.Checkbutton(main, text="Enable Logging", variable=log_var).pack(anchor='w')
     tk.Checkbutton(main, text="Always on Screen", variable=screen_var).pack(anchor='w')
 
-    # PART 5: Logs Tab – Filter, Search, Sort, Export
-    # This builds the Logs tab:
-    # ✅ Filter logs to only show “changed” entries
-    # ✅ Real-time search
-    # ✅ Column sorting (clickable)
-    # ✅ Export to CSV
-    # ✅ Reusable refresh function
     # -----------------------
-    # 📜 LOGS TAB CONTENT
+    # LOGS TAB
     # -----------------------
     filter_var = BooleanVar()
     search_var = StringVar()
@@ -417,118 +572,4 @@ def on_settings(icon=None, item=None):
     search_var.trace_add('write', lambda *_: refresh_logs())
     refresh_logs()
 
-    # PART 6: Update Tab & Version Checking
-    # This section enables:
-    # 🔍 Checking your GitHub-hosted version.txt
-    # 🔔 Alert if a newer version is available
-    # 🔗 Directs to GitHub for manual update
-    # -----------------------
-    # 🔄 UPDATE TAB
-    # -----------------------
-    update_status = tk.Label(update, text="Checking version...")
-    update_status.pack(pady=10)
-
-    update_button = tk.Button(update, text="Update Now", state='disabled', command=lambda: perform_update(update_status))
-    update_button.pack()
-
-    def check_for_update():
-        try:
-            with open(VERSION_PATH, 'r') as f:
-                local = f.read().strip()
-            remote = requests.get(REMOTE_VERSION_URL).text.strip()
-            if remote > local:
-                update_status.config(text=f"New version {remote} available")
-                update_button.config(state='normal')
-            else:
-                update_status.config(text="You are up to date.")
-        except Exception as e:
-            update_status.config(text="Error checking version")
-            log_error(e)
-
-    def perform_update(status):
-        webbrowser.open("https://github.com/GoblinRules/ippy-tray-app")
-        status.config(text="Manual update required.")
-
-    check_for_update()
-
-    # 💾 PART 7: Log Purging & Saving Settings
-    # 🧹 Purge logs UI
-    # 💾 Save & Close logic for all config updates
-    # 🧠 main() execution entrypoint
-    # -----------------------
-    # 🧹 PURGE OLD LOGS SECTION
-    # -----------------------
-    purge_frame = tk.Frame(logs)
-    purge_frame.pack(pady=5)
-
-    tk.Label(purge_frame, text="Purge logs older than:").pack(side='left')
-
-    for months in [1, 2, 3]:
-        tk.Button(
-            purge_frame,
-            text=f"{months}m",
-            command=lambda m=months: (purge_logs(m), refresh_logs())
-        ).pack(side='left', padx=5)
-
-    def purge_logs(months):
-        cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
-                rows = list(csv.reader(f, delimiter='|'))
-            filtered = [row for row in rows if datetime.datetime.strptime(row[0], '%d/%m/%Y') >= cutoff]
-            with open(LOG_FILE, 'w', newline='') as f:
-                writer = csv.writer(f, delimiter='|')
-                writer.writerows(filtered)
-
-    # 🧠 PART 8: Saving Settings & Closing
-    # ✅ This part:
-    # Lets you purge logs by age
-    # Applies and saves all setting values
-    # Closes the settings window cleanly
-    # -----------------------
-    # 💾 SAVE AND CLOSE
-    # -----------------------
-    def save_and_close():
-        config.set('Settings', 'target_ip', ip_entry.get().strip())
-        config.set('Settings', 'check_interval', str(max(1, min(45, int(interval_entry.get().strip() or 1)))))
-        config.set('Settings', 'notify_on_change', 'yes' if notify_var.get() else 'no')
-        config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
-        config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
-        save_config()
-        win.destroy()
-
-    tk.Button(win, text="Save & Close", command=save_and_close).pack(pady=5)
-    win.mainloop()
-
-#  🏁 PART 9: Main Entrypoint Execution
-# ✅ This final block does:
-# Loads your saved config.ini
-# Shows the settings GUI if it's the first time the app is run
-# Automatically opens the floating IP window if enabled
-# Starts the tray icon interface in the background
-# Begins continuous IP monitoring and log handling
-# Logs any startup failures to errors.log
 # -----------------------
-# 🏁 MAIN APPLICATION START
-# -----------------------
-if __name__ == '__main__':
-    try:
-        # Load configuration and initialize
-        load_config()
-
-        # Show settings window immediately if first run
-        if first_run:
-            on_settings()
-
-        # Show the floating window if always_on_screen is enabled
-        if config.getboolean('Settings', 'always_on_screen'):
-            toggle_float_window()
-
-        # Launch tray icon in a background thread
-        threading.Thread(target=create_tray, daemon=True).start()
-
-        # Start IP monitor loop (runs forever)
-        monitor_ip()
-
-    except Exception as e:
-        log_error(e)
