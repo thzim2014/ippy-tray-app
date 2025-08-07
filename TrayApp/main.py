@@ -213,11 +213,23 @@ def toggle_overlay():
     else:
         float_window = FloatingWindow(root)
         overlay_is_visible = True
+        # ensure label shows something right away
+        if current_ip:
+            try:
+                float_window.update_label(current_ip)
+            except Exception as e:
+                log_error(e)
+    else:
+        float_window = FloatingWindow(root)
+        overlay_is_visible = True
 
 
-def overlay_update(ip):(ip):
-    if float_window and float_window.winfo_exists():
-        float_window.update_label(ip)
+def overlay_update(ip):
+    try:
+        if float_window and float_window.winfo_exists():
+            float_window.update_label(ip)
+    except Exception as e:
+        log_error(e)
 
 # -----------------------
 # Tray Icon & Actions
@@ -461,17 +473,30 @@ def on_settings():
 
     # Save & Close
     def save_and_close():
+        global overlay_is_visible
+        # capture previous setting before we change it
+        try:
+            old_aos = config.getboolean('Settings', 'always_on_screen')
+        except Exception:
+            old_aos = always_on_screen
+        # write settings
         config.set('Settings', 'target_ip', ip_entry.get().strip())
         config.set('Settings', 'check_interval', str(max(1, min(45, int(interval_entry.get().strip() or '1')))))
         config.set('Settings', 'notify_on_change', 'yes' if notify_var.get() else 'no')
         config.set('Settings', 'enable_logging', 'yes' if log_var.get() else 'no')
         config.set('Settings', 'always_on_screen', 'yes' if screen_var.get() else 'no')
         save_config()
+        # reload to refresh globals
         load_config()
         gui_update_icon()
         monitor_event.set()
-        if always_on_screen != screen_var.get():
-            toggle_overlay()
+        # reconcile overlay with new setting
+        new_aos = screen_var.get()
+        if old_aos != new_aos:
+            if new_aos and not overlay_is_visible:
+                toggle_overlay()
+            elif not new_aos and overlay_is_visible:
+                toggle_overlay()
         on_close()
 
     tk.Button(win, text='Save & Close', command=save_and_close).pack(pady=5)
