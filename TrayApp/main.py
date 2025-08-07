@@ -43,6 +43,7 @@ import webbrowser
 # 📁 Constants & Paths
 # -----------------------
 APP_DIR = r"C:\Tools\TrayApp"
+os.chdir(APP_DIR)
 LOG_DIR = os.path.join(APP_DIR, "logs")
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
 CONFIG_PATH = os.path.join(ASSETS_DIR, "config.ini")
