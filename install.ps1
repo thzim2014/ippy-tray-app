@@ -1,173 +1,159 @@
 # ------------------------------
-# iPPY Tray App Installer Script
-# ------------------------------
-# This script:
-# - Downloads and installs Python 3.12.2 silently
-# - Installs pip and all required packages
-# - Pulls all tray app files from GitHub
-# - Sets up a startup shortcut using launcher.vbs
+# iPPY Tray App Installer Script (idempotent)
 # ------------------------------
 
 Set-StrictMode -Version Latest
-
-# --- Ensure TLS 1.2 support for Invoke-WebRequest ---
+$ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# --- Define Paths and URLs ---
-$repoRoot = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main"
-$installDir = "C:\\Tools\\TrayApp"
-$assetsDir = "$installDir\\assets"
-$logsDir = "$installDir\\logs"
-$startupFolder = "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-$shortcutName = "TrayApp.lnk"
+# --- Required minimum (newer will be preserved) ---
+$RequiredVersion = [Version]'3.12.2'
 
-$pythonInstaller = "$env:TEMP\\python-installer.exe"
+# --- Paths / URLs ---
+$repoRoot        = "https://raw.githubusercontent.com/GoblinRules/ippy-tray-app/main"
+$installDir      = "C:\Tools\TrayApp"
+$assetsDir       = Join-Path $installDir "assets"
+$logsDir         = Join-Path $installDir "logs"
+$startupFolder   = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+$shortcutName    = "TrayApp.lnk"
+
+$pythonInstaller    = Join-Path $env:TEMP "python-installer.exe"
 $pythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
 
-$getPipUrl = "https://bootstrap.pypa.io/get-pip.py"
-$getPipScript = "$env:TEMP\\get-pip.py"
+$getPipUrl    = "https://bootstrap.pypa.io/get-pip.py"
+$getPipScript = Join-Path $env:TEMP "get-pip.py"
 
-$requirementsFile = "$assetsDir\\requirements.txt"
-$vbscriptPath = "$assetsDir\\launcher.vbs"
-$pyScript = "$installDir\\main.py"
-$iconPath = "$assetsDir\\tray_app_icon.ico"
+$requirementsFile = Join-Path $assetsDir "requirements.txt"
+$vbscriptPath     = Join-Path $assetsDir "launcher.vbs"
+$pyScript         = Join-Path $installDir "main.py"
+$iconPath         = Join-Path $assetsDir "tray_app_icon.ico"
 
-# --- Utility: File Downloader ---
+# --- Helpers ---
 function Download-File {
-    param (
-        [string]$url,
-        [string]$destination
+    param([Parameter(Mandatory)] [string]$url,
+          [Parameter(Mandatory)] [string]$destination)
+    $dir = Split-Path $destination -Parent
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+    try   { Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing -ErrorAction Stop }
+    catch { Write-Error "❌ Failed to download $url"; throw }
+}
+
+function Ensure-Folder([string]$path) {
+    if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path | Out-Null }
+}
+
+function Get-PythonExe {
+    # Prefer real installs over the Windows Store alias
+    $candidates = @(
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "$env:ProgramFiles\Python312\python.exe",
+        "C:\Python312\python.exe"
     )
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing -ErrorAction Stop
-    } catch {
-        Write-Error "❌ Failed to download $url"
-        exit 1
-    }
+    foreach ($p in $candidates) { if (Test-Path $p) { return $p } }
+    $cmd = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
 }
 
-# --- Create Required Folders ---
-function Ensure-Folder {
-    param ([string]$path)
-    if (-not (Test-Path $path)) {
-        New-Item -ItemType Directory -Path $path | Out-Null
-    }
+function Get-PythonVersion([string]$pythonExe) {
+    try   { return [Version](& $pythonExe -c "import sys;print('.'.join(map(str,sys.version_info[:3])))") }
+    catch { return $null }
 }
 
+# --- Make dirs ---
 Ensure-Folder $installDir
 Ensure-Folder $assetsDir
 Ensure-Folder $logsDir
+Ensure-Folder $startupFolder
 
-# --- Download and Install Python ---
-Write-Host "📦 Downloading Python..."
-Download-File -url $pythonInstallerUrl -destination $pythonInstaller
+# --- Ensure Python (skip if >= required) ---
+$pythonExe = Get-PythonExe
+$needPythonInstall = $true
 
-Write-Host "🛠 Installing Python..."
-Start-Process -FilePath $pythonInstaller -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'TargetDir="C:\\Program Files\\Python312"' -Wait
-Remove-Item $pythonInstaller -Force
-
-# --- Extend Path for Python ---
-$env:Path += ";C:\\Program Files\\Python312\\Scripts;C:\\Program Files\\Python312\\"
-$env:Path += ";$env:LOCALAPPDATA\\Programs\\Python\\Python312\\Scripts;$env:LOCALAPPDATA\\Programs\\Python\\Python312\\"
-
-# --- Locate Python Executable ---
-$pythonExe = $null
-$pythonCmd = Get-Command python.exe -ErrorAction SilentlyContinue
-if ($pythonCmd) {
-    $pythonExe = $pythonCmd.Source
-}
-
-if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
-    $fallbacks = @( 
-        "$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe",
-        "$env:ProgramFiles\\Python312\\python.exe",
-        "C:\\Python312\\python.exe"
-    )
-    foreach ($path in $fallbacks) {
-        if (Test-Path $path) {
-            $pythonExe = $path
-            break
+if ($pythonExe) {
+    $current = Get-PythonVersion $pythonExe
+    if ($current) {
+        if ($current -ge $RequiredVersion) {
+            Write-Host "✅ Python $current already installed at $pythonExe — skipping installation."
+            $needPythonInstall = $false
+        } else {
+            Write-Host "ℹ Found Python $current (< $RequiredVersion). Will install $RequiredVersion."
         }
+    } else {
+        Write-Host "⚠ Found python.exe but couldn't read version. Will reinstall."
     }
+} else {
+    Write-Host "ℹ Python not found. Will install $RequiredVersion."
 }
 
-if (-not $pythonExe -or -not (Test-Path $pythonExe)) {
-    Write-Error "❌ Python installation failed or python.exe not found."
-    exit 1
+if ($needPythonInstall) {
+    Write-Host "📦 Downloading Python $RequiredVersion..."
+    Download-File -url $pythonInstallerUrl -destination $pythonInstaller
+    Write-Host "🛠 Installing Python $RequiredVersion..."
+    Start-Process -FilePath $pythonInstaller -ArgumentList '/quiet','InstallAllUsers=1','PrependPath=1','Include_test=0','TargetDir="C:\Program Files\Python312"' -Wait
+    Remove-Item $pythonInstaller -Force -ErrorAction SilentlyContinue
+
+    $pythonExe = Get-PythonExe
+    if (-not $pythonExe) { throw "❌ Python installation failed (python.exe not found)." }
+    $current = Get-PythonVersion $pythonExe
+    if (-not $current -or $current -lt $RequiredVersion) { throw "❌ Python not at required version after install." }
+
+    # Ensure current session PATH can find it
+    $env:Path += ";$(Split-Path $pythonExe);$(Join-Path (Split-Path $pythonExe -Parent) 'Scripts')"
+} else {
+    # Ensure current session PATH can use it
+    $env:Path += ";$(Split-Path $pythonExe);$(Join-Path (Split-Path $pythonExe -Parent) 'Scripts')"
 }
 
-# --- Install pip (if missing) ---
-$pipCheck = & $pythonExe -m pip --version 2>$null
-if ($LASTEXITCODE -ne 0 -or $pipCheck -match "No module named") {
-    Write-Host "📥 Installing pip manually..."
+# --- Ensure pip & base tools ---
+try { & $pythonExe -m pip --version *> $null }
+catch {
+    Write-Host "📥 Installing pip..."
     Download-File -url $getPipUrl -destination $getPipScript
     & $pythonExe $getPipScript
-    & $pythonExe -m ensurepip
-    & $pythonExe -m pip install --upgrade pip setuptools wheel
-    Remove-Item $getPipScript -Force
+    Remove-Item $getPipScript -Force -ErrorAction SilentlyContinue
 }
+& $pythonExe -m pip install --upgrade pip setuptools wheel
 
-# --- Fix pkg_resources if needed ---
-try {
-    & $pythonExe -c "import pkg_resources; print('OK')"
-} catch {
-    Write-Warning "⚠ pkg_resources not available. Reinstalling setuptools."
-    & $pythonExe -m pip install setuptools
-}
-
-# --- Download Tray App Files ---
+# --- Download app files ---
 Write-Host "📥 Downloading tray app files..."
-
-# Files in root install directory
 $rootFiles = @("main.py")
-
-# Files in assets directory (includes new green/red icons)
 $assetFiles = @(
-  #  "config.ini",
-    "requirements.txt",
-    "launcher.vbs",
-    "tray_app_icon.ico",
-    "tray_app_icon_g.ico",
-    "tray_app_icon_r.ico",
-    "version.txt"
+  "requirements.txt",
+  "launcher.vbs",
+  "tray_app_icon.ico",
+  "tray_app_icon_g.ico",
+  "tray_app_icon_r.ico",
+  "version.txt"
 )
+foreach ($f in $rootFiles) { Download-File -url "$repoRoot/TrayApp/$f" -destination (Join-Path $installDir $f) }
+foreach ($f in $assetFiles) { Download-File -url "$repoRoot/assets/$f"  -destination (Join-Path $assetsDir $f) }
 
-foreach ($file in $rootFiles) {
-    $url = "$repoRoot/TrayApp/$file"
-    $target = Join-Path $installDir $file
-    Download-File -url $url -destination $target
-}
-
-foreach ($file in $assetFiles) {
-    $url = "$repoRoot/assets/$file"
-    $target = Join-Path $assetsDir $file
-    Download-File -url $url -destination $target
-}
-
-# --- Fix malformed requirements.txt (if one-liner from GitHub) ---
-Write-Host "🧹 Checking requirements.txt formatting..."
+# --- Clean one-line requirements edge case ---
 if (Test-Path $requirementsFile) {
-    $content = Get-Content $requirementsFile -Raw
-    if ($content -notmatch "[\r\n]" -and $content -match "[a-zA-Z]+") {
-        $split = ($content -replace '(\w)(?=\w)', '$1 ') -split ' '
-        $cleaned = ($split | Where-Object { $_ -match '^\w+$' }) -join "`n"
-        Set-Content -Path $requirementsFile -Value $cleaned -Encoding UTF8
+    $raw = Get-Content $requirementsFile -Raw
+    if ($raw -and ($raw -notmatch "[\r\n]")) {
+        Set-Content -Path $requirementsFile -Value (($raw -replace '[,; ]+', "`n").Trim()) -Encoding UTF8
     }
 }
 
-# --- Install Python Dependencies ---
+# --- Install Python dependencies ---
 Write-Host "📦 Installing Python dependencies..."
 & $pythonExe -m pip install --upgrade pip setuptools wheel
-& $pythonExe -m pip install -r $requirementsFile
+if (Test-Path $requirementsFile) {
+    & $pythonExe -m pip install -r $requirementsFile
+} else {
+    & $pythonExe -m pip install requests pystray Pillow win10toast
+}
 
-# --- Create Startup Shortcut ---
+# --- Startup shortcut ---
 Write-Host "🔗 Creating startup shortcut..."
 $WshShell = New-Object -ComObject WScript.Shell
-$shortcut = $WshShell.CreateShortcut("$startupFolder\\$shortcutName")
+$shortcut = $WshShell.CreateShortcut((Join-Path $startupFolder $shortcutName))
 $shortcut.TargetPath = "wscript.exe"
 $shortcut.Arguments = '"' + $vbscriptPath + '"'
 $shortcut.WorkingDirectory = $installDir
-$shortcut.IconLocation = "$iconPath"
+$shortcut.IconLocation = $iconPath
 $shortcut.Save()
 
 Write-Host "`n✅ Install complete. Tray App will run on next login."
