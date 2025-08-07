@@ -253,15 +253,26 @@ def monitor_ip():
 # 🧊 Tray Icon Display & Toggle Float Window
 # -----------------------
 def toggle_float_window():
-    global float_window
-    if float_window:
-        if float_window.state() == 'withdrawn':
-            float_window.deiconify()
+    def safe_toggle():
+        global float_window
+        if float_window:
+            if float_window.state() == 'withdrawn':
+                float_window.deiconify()
+            else:
+                float_window.withdraw()
         else:
-            float_window.withdraw()
-    else:
-        float_window = FloatingWindow()
-        float_window.after(0, float_window.deiconify)
+            float_window = FloatingWindow()
+            float_window.after(0, float_window.deiconify)
+
+    try:
+        # Schedule GUI interaction in main loop if float_window exists
+        if float_window:
+            float_window.after(0, safe_toggle)
+        else:
+            safe_toggle()
+    except:
+        safe_toggle()
+
 
 
 def get_tray_icon():
@@ -304,7 +315,7 @@ def create_tray():
 
     icon = pystray.Icon("iPPY", Image.open(get_tray_icon()), menu=pystray.Menu(
         pystray.MenuItem("Settings", on_settings),
-        pystray.MenuItem(lambda item: get_window_label(), lambda i, _: toggle_float_window()),
+        pystray.MenuItem("Toggle IP Window", lambda i, _: toggle_float_window()),
         pystray.MenuItem("Recheck IP", lambda i, _: recheck_ip()),
         pystray.MenuItem("Exit", on_exit)
     ))
