@@ -1,2 +1,3 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "pythonw.exe ""C:\Tools\TrayApp\main.py""", 0, False
+WshShell.CurrentDirectory = "C:\Tools\TrayApp"
+WshShell.Run "pythonw.exe main.py", 0, False
