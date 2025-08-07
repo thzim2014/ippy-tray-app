@@ -329,7 +329,6 @@ def create_tray():
     ))
     icon.run()
 
-
 # -----------------------
 # Settings Window (Main, Logs, Update Tabs)
 # -----------------------
