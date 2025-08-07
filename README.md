@@ -96,7 +96,11 @@ window_y = 900
   - **Exit**
 - Manual execution via:
   ```
-  C:\Tools\TrayApp\main.py
+  python.exe C:\Tools\TrayApp\main.py
+  ```
+  or
+  ```
+  C:\Tools\TrayApp\assets\launcher.vbs
   ```
 
 ---
