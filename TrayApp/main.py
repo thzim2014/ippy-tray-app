@@ -1,4 +1,4 @@
-# main.py - IP Monitor Tray App (Clean, Thread-Safe, Emoji-Free)
+# main.py - iPPY IP Monitor Tray App (Clean, Thread-safe, Emoji-free)
 
 # PART 1: Dependency Management & Imports
 import subprocess, sys
@@ -11,7 +11,7 @@ def ensure_dependencies():
         if missing:
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])
     except Exception as e:
-        print(f"Dependency installation failed: {e}")
+        print(f"Failed to install dependencies: {e}")
         sys.exit(1)
 ensure_dependencies()
 
@@ -23,7 +23,7 @@ import configparser
 from win10toast import ToastNotifier
 import csv, traceback, webbrowser
 
-# PART 2: Paths and Globals
+# PART 2: Paths & Globals
 APP_DIR = r"C:\Tools\TrayApp"
 os.chdir(APP_DIR)
 LOG_DIR = os.path.join(APP_DIR, "logs")
@@ -49,16 +49,25 @@ first_run = False
 os.makedirs(APP_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# PART 3: Configuration and Logging
+# PART 3: Configuration & Logging Utilities
 def load_config():
     global first_run
-    default = {'Settings': {
-        'target_ip': DEFAULT_IP, 'check_interval': '1',
-        'notify_on_change': 'yes', 'enable_logging': 'yes',
-        'always_on_screen': 'no', 'window_alpha': '0.85',
-        'window_x': '10', 'window_y': '900'}}
+    default = {
+        'Settings': {
+            'target_ip': DEFAULT_IP,
+            'check_interval': '1',
+            'notify_on_change': 'yes',
+            'enable_logging': 'yes',
+            'always_on_screen': 'no',
+            'window_alpha': '0.85',
+            'window_x': '10',
+            'window_y': '900'
+        }
+    }
     if not os.path.exists(CONFIG_PATH):
-        config.read_dict(default); save_config(); first_run = True
+        config.read_dict(default)
+        save_config()
+        first_run = True
     else:
         config.read(CONFIG_PATH)
 
@@ -74,7 +83,8 @@ def log_error(err):
 
 def get_ip():
     try:
-        return requests.get(IP_API_URL, timeout=5).json().get('query')
+        res = requests.get(IP_API_URL, timeout=5)
+        return res.json().get('query')
     except Exception as e:
         log_error(e)
         return None
@@ -84,19 +94,21 @@ def log_ip(ip, changed, manual=False):
         now = datetime.datetime.now().strftime('%d/%m/%Y|%H:%M:%S')
         expected = config.get('Settings', 'target_ip')
         with open(LOG_FILE, 'a', newline='') as f:
-            writer = csv.writer(f, delimiter='|')
-            writer.writerow(now.split('|') + [expected, ip, 'Yes' if changed else 'No', 'Yes' if manual else 'No'])
+            wr = csv.writer(f, delimiter='|')
+            wr.writerow([*now.split('|'), expected, ip, 'Yes' if changed else 'No', 'Yes' if manual else 'No'])
 
-# PART 4: Floating Window
+# PART 4: Floating Window Display
 class FloatingWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.overrideredirect(True)
         self.attributes("-topmost", True)
-        self.geometry(f"+{config.get('Settings','window_x','10')}+{config.get('Settings','window_y','900')}")
-        self.attributes("-alpha", float(config.get('Settings','window_alpha','0.85')))
+        wx = config.get('Settings','window_x', fallback='10')
+        wy = config.get('Settings','window_y', fallback='900')
+        self.geometry(f"+{wx}+{wy}")
+        self.attributes("-alpha", float(config.get('Settings','window_alpha', fallback='0.85')))
         self.configure(bg="black")
-        self.label = tk.Label(self, text="...", font=("Arial",14), fg="white", bg="black")
+        self.label = tk.Label(self, text="...", font=("Arial", 14), fg="white", bg="black")
         self.label.pack(padx=5, pady=2)
         self.make_draggable(self.label)
         self.protocol("WM_DELETE_WINDOW", self.withdraw)
@@ -104,27 +116,32 @@ class FloatingWindow(tk.Tk):
     def make_draggable(self, widget):
         widget.bind("<ButtonPress-1>", self.start_move)
         widget.bind("<B1-Motion>", self.do_move)
+
     def start_move(self, event):
         self._x, self._y = event.x, event.y
+
     def do_move(self, event):
         x = self.winfo_x() + event.x - self._x
         y = self.winfo_y() + event.y - self._y
         self.geometry(f"+{x}+{y}")
-        config['Settings']['window_x'], config['Settings']['window_y'] = str(x), str(y)
+        config['Settings']['window_x'] = str(x)
+        config['Settings']['window_y'] = str(y)
         config['Settings']['window_alpha'] = str(self.attributes("-alpha"))
         save_config()
 
-# PART 5: Monitor and Update Logic
+# PART 5: IP Monitoring & Auto-Updating UI
 def update_float_window(ip, changed):
     global notified
     if float_window:
         float_window.label.config(text=ip)
         color = 'green' if not changed else 'red'
         float_window.label.config(bg=color)
+
         if changed:
-            float_window.attributes("-alpha", 1.0); notified = True
+            float_window.attributes("-alpha", 1.0)
+            notified = True
         elif notified:
-            float_window.attributes("-alpha", float(config.get('Settings','window_alpha','0.85')))
+            float_window.attributes("-alpha", float(config.get('Settings','window_alpha', fallback='0.85')))
             notified = False
 
 def notify_change(old, new):
@@ -162,10 +179,10 @@ def monitor_ip():
             update_float_window(ip, changed)
             update_icon()
             log_ip(ip, changed)
-        interval = max(1, min(45, int(config.get('Settings','check_interval','1'))))
-        time.sleep(60/interval)
+        interval = max(1, min(45, int(config.get('Settings','check_interval', fallback='1'))))
+        time.sleep(60 / interval)
 
-# PART 6: Tray Logic and Main Thread Access
+# PART 6: Tray Integration & Thread Safety
 def toggle_float_window():
     global float_window
     def show():
@@ -177,6 +194,7 @@ def toggle_float_window():
         else:
             start = FloatingWindow()
             start.mainloop()
+
     if threading.current_thread() == threading.main_thread():
         show()
     else:
@@ -186,7 +204,8 @@ def toggle_float_window():
             pass
 
 def get_tray_icon():
-    return ICON_GREEN_PATH if current_ip == config.get('Settings','target_ip') else ICON_RED_PATH
+    target = config.get('Settings','target_ip', fallback=DEFAULT_IP)
+    return ICON_GREEN_PATH if current_ip == target else ICON_RED_PATH
 
 def update_icon():
     if icon:
@@ -218,29 +237,22 @@ def create_tray():
     ))
     icon.run()
 
-# PART 7: Settings Window with Tabs
+# PART 7: Settings GUI with Tabs (Concise)
 def on_settings():
     win = tk.Tk()
     win.title("iPPY Settings")
     win.geometry("800x500")
     tabs = ttk.Notebook(win)
-    main_tab = ttk.Frame(tabs)
-    logs_tab = ttk.Frame(tabs)
-    update_tab = ttk.Frame(tabs)
+    main_tab, logs_tab, upd_tab = ttk.Frame(tabs), ttk.Frame(tabs), ttk.Frame(tabs)
     tabs.add(main_tab, text="Main")
     tabs.add(logs_tab, text="Logs")
-    tabs.add(update_tab, text="Update")
+    tabs.add(upd_tab, text="Update")
     tabs.pack(expand=True, fill='both')
 
-    # Main Tab: Fields ...
-    # Logs Tab: Table, filter/search
-    # Update Tab: Version check
-    # Purge, Save & Close btns...
-    # (Your existing code, minus emojis or threading calls)
-
+    # Insert your GUI code for fields, log table, update checker, purge, save/close...
     win.mainloop()
 
-# PART 8: Entry Point
+# PART 8: Main Execution
 if __name__ == "__main__":
     load_config()
     if first_run:
