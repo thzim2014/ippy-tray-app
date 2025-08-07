@@ -195,7 +195,7 @@ def monitor_ip():
 def toggle_float_window():
     global float_window
     def show_or_hide():
-        nonlocal float_window
+        global float_window
         if float_window:
             if float_window.state() == 'withdrawn':
                 float_window.deiconify()
