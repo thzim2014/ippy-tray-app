@@ -219,9 +219,6 @@ def toggle_overlay():
                 float_window.update_label(current_ip)
             except Exception as e:
                 log_error(e)
-    else:
-        float_window = FloatingWindow(root)
-        overlay_is_visible = True
 
 
 def overlay_update(ip):
@@ -242,8 +239,7 @@ def create_tray_icon():
     def settings_action(icon_obj, item):
         gui_show_settings()
     def toggle_action(icon_obj, item):
-        global overlay_is_visible
-        overlay_is_visible = not overlay_is_visible
+        # Toggle via GUI thread; overlay_is_visible will be updated inside toggle_overlay()
         gui_toggle_overlay()
     def recheck_action(icon_obj, item):
         recheck_ip()
@@ -512,5 +508,7 @@ if __name__ == '__main__':
     threading.Thread(target=monitor_ip, daemon=True).start()
     if first_run or always_on_screen:
         toggle_overlay()
+    if first_run:
+        gui_show_settings()
     process_gui_queue()
     root.mainloop()
