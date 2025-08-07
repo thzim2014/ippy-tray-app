@@ -92,6 +92,8 @@ def load_config():
     global first_run, target_ip, notify_on_change, enable_logging, always_on_screen
     first_run = False
 
+    config = configparser.ConfigParser()
+
     default_config = {
         'Settings': {
             'target_ip': DEFAULT_IP,
