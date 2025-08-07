@@ -434,7 +434,7 @@ def on_settings(icon=None, item=None):
             command=lambda m=months: (purge_logs(m), refresh_logs())
         ).pack(side='left', padx=5)
 
- def purge_logs(months):
+     def purge_logs(months):
         cutoff = datetime.datetime.now() - datetime.timedelta(days=30 * months)
         if os.path.exists(LOG_FILE):
             with open(LOG_FILE, 'r') as f:
