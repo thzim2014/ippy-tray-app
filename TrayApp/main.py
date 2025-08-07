@@ -230,6 +230,8 @@ def create_tray_icon():
     def settings_action(icon_obj, item):
         gui_show_settings()
     def toggle_action(icon_obj, item):
+        global overlay_is_visible
+        overlay_is_visible = not overlay_is_visible
         gui_toggle_overlay()
     def recheck_action(icon_obj, item):
         recheck_ip()
