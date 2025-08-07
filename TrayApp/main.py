@@ -93,12 +93,12 @@ def load_config():
     default_config = {
         'Settings': {
             'target_ip': DEFAULT_IP,
-            'check_interval': '1',
+            'check_interval': '10',
             'notify_on_change': 'yes',
             'enable_logging': 'yes',
-            'always_on_screen': 'no',
+            'always_on_screen': 'yes',
             'window_alpha': '0.85',
-            'window_x': '10',
+            'window_x': '700',
             'window_y': '900'
         }
     }
