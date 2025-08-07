@@ -123,7 +123,7 @@ $rootFiles = @("main.py")
 
 # Files in assets directory (includes new green/red icons)
 $assetFiles = @(
-    "config.ini",
+  #  "config.ini",
     "requirements.txt",
     "launcher.vbs",
     "tray_app_icon.ico",
